@@ -9,6 +9,7 @@ import {
 import { buildOutputFilename } from "@/lib/filename-utils";
 import type { WatermarkConfig } from "@/types/tool.types";
 
+// DEFAULT CONFIG
 const DEFAULT_CONFIG: WatermarkConfig = {
   text: "CONFIDENTIAL",
   fontSize: 48,
