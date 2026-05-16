@@ -59,7 +59,7 @@ const PAGE_META: Record<string, { description: string; canonical: string }> = {
   },
 };
 
-const BASE_URL = "https://aurora-pdf.vercel.app";
+const BASE_URL = "https://aurora.stareezy.tech";
 
 function setMeta(name: string, content: string) {
   let el = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);

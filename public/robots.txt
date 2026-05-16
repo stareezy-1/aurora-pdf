@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://aurora-pdf.vercel.app/sitemap.xml
+Sitemap: https://aurora.stareezy.tech/sitemap.xml
