@@ -148,6 +148,15 @@ a {
     transform: translateX(16px) scale(0.5);
   }
 }
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
 
 /* Utility classes */
 .fade-in {

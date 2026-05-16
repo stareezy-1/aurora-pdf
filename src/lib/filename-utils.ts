@@ -10,7 +10,10 @@ export type ToolName =
   | "sign"
   | "watermark"
   | "split"
-  | "split-zip";
+  | "split-zip"
+  | "html-to-pdf"
+  | "organize"
+  | "protect";
 
 const TOOL_SUFFIX: Record<ToolName, string> = {
   compress: "_compressed.pdf",
@@ -25,6 +28,9 @@ const TOOL_SUFFIX: Record<ToolName, string> = {
   watermark: "_watermarked.pdf",
   split: "_split.pdf",
   "split-zip": "_split_parts.zip",
+  "html-to-pdf": "_converted.pdf",
+  organize: "_organized.pdf",
+  protect: "_protected.pdf",
 };
 
 /**

@@ -66,7 +66,7 @@ export function useSplitPdf() {
         const result = await extractPages(bytes, indices);
         onProgress(100);
         return {
-          blob: new Blob([result], { type: "application/pdf" }),
+          blob: new Blob([result as any], { type: "application/pdf" }),
           filename: buildOutputFilename(file.name, "split"),
         };
       }

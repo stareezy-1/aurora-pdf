@@ -62,4 +62,10 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
   "Sign PDF": "Draw, type, or upload a signature and embed it into your PDF.",
   "Add Watermark": "Apply a custom text watermark to every page of your PDF.",
   "Split PDF": "Extract specific pages from a PDF into a new, smaller file.",
+  "HTML to PDF":
+    "Convert any HTTPS webpage to a PDF, rendered locally in your browser.",
+  "Organize PDF":
+    "Reorder, rotate, duplicate, and delete PDF pages to reorganize documents.",
+  "Protect PDF":
+    "Encrypt your PDF with a password to restrict unauthorized access.",
 };

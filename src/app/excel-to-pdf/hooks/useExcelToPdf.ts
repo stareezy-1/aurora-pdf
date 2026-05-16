@@ -23,7 +23,7 @@ export function useExcelToPdf() {
     process: async (file, onProgress) => {
       const bytes = await xlsxToPdf(file, onProgress);
       return {
-        blob: new Blob([bytes], { type: "application/pdf" }),
+        blob: new Blob([bytes as any], { type: "application/pdf" }),
         filename: buildOutputFilename(file.name, "excel-to-pdf"),
       };
     },

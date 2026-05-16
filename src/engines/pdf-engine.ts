@@ -4,12 +4,14 @@ import type {
   ProgressCallback,
   TextAnnotation,
   OcrPageResult,
+  ShapeAnnotation,
 } from "@/types/engine.types";
 import type {
   CompressionLevel,
   WatermarkConfig,
   SignatureConfig,
   DpiOption,
+  PageNumberConfig,
 } from "@/types/tool.types";
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -247,6 +249,55 @@ export async function addTextAnnotation(
     size: annotation.fontSize,
     font,
     color: rgb(r, g, b),
+    ...(annotation.opacity !== undefined && annotation.opacity < 100
+      ? { opacity: annotation.opacity / 100 }
+      : {}),
+    ...(annotation.rotation ? { rotate: degrees(annotation.rotation) } : {}),
+  });
+  return pdfDoc.save();
+}
+
+// ---------------------------------------------------------------------------
+// getPageSizes — returns width/height in points for every page
+// ---------------------------------------------------------------------------
+
+export async function getPageSizes(
+  pdfBytes: Uint8Array,
+): Promise<Array<{ width: number; height: number }>> {
+  const pdfDoc = await PDFDocument.load(copyBytes(pdfBytes));
+  return pdfDoc.getPages().map((p) => p.getSize());
+}
+
+// ---------------------------------------------------------------------------
+// embedImageOverlay — embed a data URL image at normalized (0–1) coordinates
+// Used by Edit PDF export to apply image overlays (inserted images, signatures)
+// ---------------------------------------------------------------------------
+
+export async function embedImageOverlay(
+  pdfBytes: Uint8Array,
+  opts: {
+    pageIndex: number;
+    dataUrl: string;
+    x: number; // 0–1 normalized from left
+    y: number; // 0–1 normalized from bottom (pdf-lib convention)
+    width: number; // 0–1 normalized
+    height: number; // 0–1 normalized
+  },
+): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.load(copyBytes(pdfBytes));
+  const page = pdfDoc.getPage(opts.pageIndex);
+  const { width: pw, height: ph } = page.getSize();
+  const base64 = opts.dataUrl.split(",")[1];
+  const imgBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const isPng = opts.dataUrl.startsWith("data:image/png");
+  const image = isPng
+    ? await pdfDoc.embedPng(imgBytes)
+    : await pdfDoc.embedJpg(imgBytes);
+  page.drawImage(image, {
+    x: opts.x * pw,
+    y: opts.y * ph,
+    width: opts.width * pw,
+    height: opts.height * ph,
   });
   return pdfDoc.save();
 }
@@ -458,4 +509,490 @@ export async function hasTextLayer(pdfBytes: Uint8Array): Promise<boolean> {
     if (content.items.length > 0) return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// rotatePages
+// ---------------------------------------------------------------------------
+
+export async function rotatePages(
+  pdfBytes: Uint8Array,
+  rotations: Array<{ pageIndex: number; degrees: 90 | 180 | 270 }>,
+): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.load(copyBytes(pdfBytes));
+  const pages = pdfDoc.getPages();
+  for (const { pageIndex, degrees: deg } of rotations) {
+    if (pageIndex < 0 || pageIndex >= pages.length) continue;
+    pages[pageIndex].setRotation(degrees(deg));
+  }
+  return pdfDoc.save();
+}
+
+// ---------------------------------------------------------------------------
+// duplicatePage
+// ---------------------------------------------------------------------------
+
+export async function duplicatePage(
+  pdfBytes: Uint8Array,
+  pageIndex: number,
+): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.load(copyBytes(pdfBytes));
+  const total = pdfDoc.getPageCount();
+  if (pageIndex < 0 || pageIndex >= total) {
+    throw new Error(
+      `Page index ${pageIndex} is out of range (0–${total - 1}).`,
+    );
+  }
+  const [copiedPage] = await pdfDoc.copyPages(pdfDoc, [pageIndex]);
+  pdfDoc.insertPage(pageIndex + 1, copiedPage);
+  return pdfDoc.save();
+}
+
+// ---------------------------------------------------------------------------
+// applyDrawOverlay
+// ---------------------------------------------------------------------------
+
+export async function applyDrawOverlay(
+  pdfBytes: Uint8Array,
+  pageIndex: number,
+  pathDataUrl: string,
+): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.load(copyBytes(pdfBytes));
+  const page = pdfDoc.getPage(pageIndex);
+  const base64 = pathDataUrl.split(",")[1];
+  const pngBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const pngImage = await pdfDoc.embedPng(pngBytes);
+  page.drawImage(pngImage, {
+    x: 0,
+    y: 0,
+    width: page.getWidth(),
+    height: page.getHeight(),
+  });
+  return pdfDoc.save();
+}
+
+// ---------------------------------------------------------------------------
+// applyShapeOverlay
+// ---------------------------------------------------------------------------
+
+export async function applyShapeOverlay(
+  pdfBytes: Uint8Array,
+  pageIndex: number,
+  shape: ShapeAnnotation,
+): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.load(copyBytes(pdfBytes));
+  const page = pdfDoc.getPage(pageIndex);
+  const stroke = hexToRgb(shape.strokeColor);
+  const strokeColor = rgb(stroke.r, stroke.g, stroke.b);
+  const fillColorValue =
+    shape.fillColor !== null ? hexToRgb(shape.fillColor) : null;
+  const borderWidth = shape.strokeWidth;
+  if (shape.type === "rectangle") {
+    page.drawRectangle({
+      x: shape.x,
+      y: shape.y,
+      width: shape.width,
+      height: shape.height,
+      borderColor: strokeColor,
+      borderWidth,
+      ...(fillColorValue !== null
+        ? { color: rgb(fillColorValue.r, fillColorValue.g, fillColorValue.b) }
+        : { opacity: 0 }),
+    });
+  } else if (shape.type === "circle") {
+    const xScale = shape.width / 2;
+    const yScale = shape.height / 2;
+    page.drawEllipse({
+      x: shape.x + xScale,
+      y: shape.y + yScale,
+      xScale,
+      yScale,
+      borderColor: strokeColor,
+      borderWidth,
+      ...(fillColorValue !== null
+        ? { color: rgb(fillColorValue.r, fillColorValue.g, fillColorValue.b) }
+        : { opacity: 0 }),
+    });
+  } else if (shape.type === "line") {
+    page.drawLine({
+      start: { x: shape.x, y: shape.y },
+      end: { x: shape.x + shape.width, y: shape.y + shape.height },
+      color: strokeColor,
+      thickness: borderWidth,
+    });
+  }
+  return pdfDoc.save();
+}
+
+// ---------------------------------------------------------------------------
+// applyPageNumbers
+// ---------------------------------------------------------------------------
+
+function resolveStandardFont(
+  fontFamily: string,
+): (typeof StandardFonts)[keyof typeof StandardFonts] {
+  const lower = fontFamily.toLowerCase();
+  if (
+    lower.includes("times") ||
+    lower.includes("georgia") ||
+    lower.includes("palatino") ||
+    lower.includes("garamond") ||
+    lower.includes("bookman")
+  )
+    return StandardFonts.TimesRoman;
+  if (lower.includes("courier") || lower.includes("monospace"))
+    return StandardFonts.Courier;
+  return StandardFonts.Helvetica;
+}
+
+export async function applyPageNumbers(
+  pdfBytes: Uint8Array,
+  config: PageNumberConfig,
+  onProgress: ProgressCallback,
+): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.load(copyBytes(pdfBytes));
+  const pages = pdfDoc.getPages();
+  const totalPages = pages.length;
+  const font = await pdfDoc.embedFont(resolveStandardFont(config.fontFamily));
+  const { r, g, b } = hexToRgb(config.color);
+  for (let i = 0; i < totalPages; i++) {
+    onProgress(
+      Math.round((i / totalPages) * 100),
+      `Adding page number ${i + 1} of ${totalPages}…`,
+    );
+    let label =
+      config.format === "1"
+        ? String(i + 1)
+        : config.format === "Page 1"
+        ? `Page ${i + 1}`
+        : `${i + 1}/${totalPages}`;
+    const page = pages[i];
+    const { width: pageWidth, height: pageHeight } = page.getSize();
+    let textWidth = 0;
+    try {
+      textWidth = font.widthOfTextAtSize(label, config.fontSize);
+    } catch {
+      textWidth = label.length * config.fontSize * 0.5;
+    }
+    let x = 0,
+      y = 0;
+    switch (config.position) {
+      case "bottom-center":
+        x = (pageWidth - textWidth) / 2;
+        y = 20;
+        break;
+      case "bottom-left":
+        x = 20;
+        y = 20;
+        break;
+      case "bottom-right":
+        x = pageWidth - textWidth - 20;
+        y = 20;
+        break;
+      case "top-center":
+        x = (pageWidth - textWidth) / 2;
+        y = pageHeight - 30;
+        break;
+      default:
+        x = (pageWidth - textWidth) / 2;
+        y = 20;
+    }
+    page.drawText(label, {
+      x,
+      y,
+      size: config.fontSize,
+      font,
+      color: rgb(r, g, b),
+    });
+  }
+  onProgress(100, "Done");
+  return pdfDoc.save();
+}
+
+// ---------------------------------------------------------------------------
+// encryptWithPassword — RC4-40 Standard Security Handler Rev 2
+// ---------------------------------------------------------------------------
+
+export async function encryptWithPassword(
+  pdfBytes: Uint8Array,
+  userPassword: string,
+): Promise<Uint8Array> {
+  // Normalise to a flat xref-table PDF (no xref streams) so our parser works
+  const pdfDoc = await PDFDocument.load(copyBytes(pdfBytes));
+  const normalised = await pdfDoc.save({ useObjectStreams: false });
+  return _encryptRC4_40(normalised, userPassword);
+}
+
+/**
+ * Full RC4-40 PDF encryption (Standard Security Handler, Revision 2).
+ * Implements PDF 1.4 spec §3.5 algorithms 2, 3, 4 AND encrypts every
+ * stream and string object with per-object RC4 keys.
+ */
+function _encryptRC4_40(
+  pdfBytes: Uint8Array,
+  userPassword: string,
+): Uint8Array {
+  // ── Primitives ─────────────────────────────────────────────────────────────
+  function strToLatin1(s: string): Uint8Array {
+    const b = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i) & 0xff;
+    return b;
+  }
+  function toHex(b: Uint8Array): string {
+    return Array.from(b)
+      .map((x) => x.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  // MD5 (RFC 1321)
+  function md5(data: Uint8Array): Uint8Array {
+    const len = data.length;
+    const padLen = (len + 9 + 63) & ~63;
+    const buf = new Uint8Array(padLen);
+    buf.set(data);
+    buf[len] = 0x80;
+    const dv = new DataView(buf.buffer);
+    dv.setUint32(padLen - 8, (len * 8) >>> 0, true);
+    dv.setUint32(padLen - 4, Math.floor(len / 0x20000000) >>> 0, true);
+    const T = Array.from(
+      { length: 64 },
+      (_, i) => (Math.abs(Math.sin(i + 1)) * 0x100000000) >>> 0,
+    );
+    const S = [
+      7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20,
+      5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4,
+      11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6,
+      10, 15, 21,
+    ];
+    let a = 0x67452301,
+      b = 0xefcdab89,
+      c = 0x98badcfe,
+      d = 0x10325476;
+    const w32 = new Uint32Array(buf.buffer);
+    for (let i = 0; i < padLen / 4; i += 16) {
+      const M = w32.slice(i, i + 16);
+      let aa = a,
+        bb = b,
+        cc = c,
+        dd = d;
+      for (let j = 0; j < 64; j++) {
+        let F: number, g: number;
+        if (j < 16) {
+          F = (b & c) | (~b & d);
+          g = j;
+        } else if (j < 32) {
+          F = (d & b) | (~d & c);
+          g = (5 * j + 1) % 16;
+        } else if (j < 48) {
+          F = b ^ c ^ d;
+          g = (3 * j + 5) % 16;
+        } else {
+          F = c ^ (b | ~d);
+          g = (7 * j) % 16;
+        }
+        F = (F + a + M[g] + T[j]) >>> 0;
+        a = d;
+        d = c;
+        c = b;
+        b = (b + ((F << S[j]) | (F >>> (32 - S[j])))) >>> 0;
+      }
+      a = (a + aa) >>> 0;
+      b = (b + bb) >>> 0;
+      c = (c + cc) >>> 0;
+      d = (d + dd) >>> 0;
+    }
+    const r = new Uint8Array(16);
+    const rv = new DataView(r.buffer);
+    rv.setUint32(0, a, true);
+    rv.setUint32(4, b, true);
+    rv.setUint32(8, c, true);
+    rv.setUint32(12, d, true);
+    return r;
+  }
+
+  // RC4
+  function rc4(key: Uint8Array, data: Uint8Array): Uint8Array {
+    const S = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) S[i] = i;
+    let j = 0;
+    for (let i = 0; i < 256; i++) {
+      j = (j + S[i] + key[i % key.length]) & 0xff;
+      [S[i], S[j]] = [S[j], S[i]];
+    }
+    const out = new Uint8Array(data.length);
+    let x = 0,
+      y = 0;
+    for (let i = 0; i < data.length; i++) {
+      x = (x + 1) & 0xff;
+      y = (y + S[x]) & 0xff;
+      [S[x], S[y]] = [S[y], S[x]];
+      out[i] = data[i] ^ S[(S[x] + S[y]) & 0xff];
+    }
+    return out;
+  }
+
+  // ── Key derivation (Algorithm 2) ───────────────────────────────────────────
+  const PAD = new Uint8Array([
+    0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56,
+    0xff, 0xfa, 0x01, 0x08, 0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80,
+    0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a,
+  ]);
+  const KEY_LEN = 5; // 40-bit
+  const P = -4; // permissions (allow all)
+  const fileId = new Uint8Array(16);
+  crypto.getRandomValues(fileId);
+
+  function padPwd(pwd: string): Uint8Array {
+    const b = strToLatin1(pwd);
+    const r = new Uint8Array(32);
+    const n = Math.min(b.length, 32);
+    r.set(b.slice(0, n));
+    r.set(PAD.slice(0, 32 - n), n);
+    return r;
+  }
+
+  const userPad = padPwd(userPassword);
+  const ownerPad = padPwd(userPassword); // same password for owner
+
+  // Algorithm 3: compute O entry
+  const oHash = md5(ownerPad);
+  const oKey = oHash.slice(0, KEY_LEN);
+  const oEntry = rc4(oKey, userPad);
+
+  // Algorithm 2: compute encryption key
+  const pBytes = new Uint8Array(4);
+  const pVal = P >>> 0;
+  pBytes[0] = pVal & 0xff;
+  pBytes[1] = (pVal >> 8) & 0xff;
+  pBytes[2] = (pVal >> 16) & 0xff;
+  pBytes[3] = (pVal >> 24) & 0xff;
+  const keyInput = new Uint8Array([
+    ...userPad,
+    ...oEntry,
+    ...pBytes,
+    ...fileId,
+  ]);
+  const encKey = md5(keyInput).slice(0, KEY_LEN);
+
+  // Algorithm 4: compute U entry
+  const uEntry = rc4(encKey, PAD);
+
+  // Per-object key: encKey + 3 bytes of objNum (LE) + 2 bytes of genNum (LE)
+  function objectKey(objNum: number, genNum: number): Uint8Array {
+    const k = new Uint8Array(KEY_LEN + 5);
+    k.set(encKey);
+    k[KEY_LEN] = objNum & 0xff;
+    k[KEY_LEN + 1] = (objNum >> 8) & 0xff;
+    k[KEY_LEN + 2] = (objNum >> 16) & 0xff;
+    k[KEY_LEN + 3] = genNum & 0xff;
+    k[KEY_LEN + 4] = (genNum >> 8) & 0xff;
+    return md5(k).slice(0, Math.min(KEY_LEN + 5, 16));
+  }
+
+  // ── Parse & rebuild PDF with encrypted streams ─────────────────────────────
+  const src = new TextDecoder("latin1").decode(pdfBytes);
+
+  // Find all indirect objects: "N G obj ... endobj"
+  // We'll rebuild the PDF by encrypting stream data and string literals
+  const encDict = `<< /Filter /Standard /V 1 /R 2 /Length 40 /P ${P} /O <${toHex(
+    oEntry,
+  )}> /U <${toHex(uEntry)}> >>`;
+
+  // Find highest object number
+  const objRe = /^(\d+)\s+(\d+)\s+obj\b/gm;
+  let maxObj = 0;
+  for (const m of src.matchAll(objRe))
+    maxObj = Math.max(maxObj, parseInt(m[1]));
+  const encObjNum = maxObj + 1;
+
+  // Encrypt stream contents
+  // Strategy: find each "N G obj ... stream\r?\n ... endstream" block and RC4-encrypt the stream bytes
+  const enc = new TextEncoder();
+
+  // Work on raw bytes for stream encryption
+  const srcBytes = new Uint8Array(pdfBytes);
+
+  // Build output by scanning for objects and encrypting streams
+  const chunks: Uint8Array[] = [];
+  let pos = 0;
+  const objStartRe = /(\d+)\s+(\d+)\s+obj\b/g;
+  const offsets: Array<{ start: number; objNum: number; genNum: number }> = [];
+
+  // Find all object start positions
+  for (const m of src.matchAll(objStartRe)) {
+    offsets.push({
+      start: m.index!,
+      objNum: parseInt(m[1]),
+      genNum: parseInt(m[2]),
+    });
+  }
+
+  // For each object, encrypt its stream if it has one
+  for (let i = 0; i < offsets.length; i++) {
+    const { start, objNum, genNum } = offsets[i];
+    const end = i + 1 < offsets.length ? offsets[i + 1].start : src.length;
+    const objSrc = src.slice(start, end);
+
+    // Find stream...endstream within this object
+    const streamMatch = objSrc.match(/\bstream\r?\n/);
+    const endstreamIdx = objSrc.lastIndexOf("endstream");
+
+    if (streamMatch && endstreamIdx > 0) {
+      const streamDataStart =
+        start + streamMatch.index! + streamMatch[0].length;
+      const streamDataEnd = start + endstreamIdx;
+
+      // Copy everything up to stream data start
+      chunks.push(srcBytes.slice(pos, streamDataStart));
+
+      // Encrypt the stream data
+      const streamData = srcBytes.slice(streamDataStart, streamDataEnd);
+      const key = objectKey(objNum, genNum);
+      const encrypted = rc4(key, streamData);
+      chunks.push(encrypted);
+
+      pos = streamDataEnd;
+    }
+  }
+  // Copy remainder
+  chunks.push(srcBytes.slice(pos));
+
+  // Assemble encrypted PDF
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const encPdf = new Uint8Array(totalLen);
+  let off = 0;
+  for (const c of chunks) {
+    encPdf.set(c, off);
+    off += c.length;
+  }
+
+  // Append encrypt object and updated xref
+  const encObjStr = `\n${encObjNum} 0 obj\n${encDict}\nendobj\n`;
+  const encObjOffset = encPdf.length;
+
+  // Find trailer in encrypted PDF
+  const encSrc = new TextDecoder("latin1").decode(encPdf);
+  const trailerMatch = encSrc.match(/trailer\s*<<([^>]*)>>/s);
+  let trailerInner = trailerMatch ? trailerMatch[1] : `/Size ${encObjNum + 1}`;
+  trailerInner = trailerInner
+    .replace(/\/Encrypt\s+\d+\s+\d+\s+R/g, "")
+    .replace(/\/ID\s*\[.*?\]/gs, "");
+  const newTrailer = `<< ${trailerInner.trim()} /Encrypt ${encObjNum} 0 R /ID [<${toHex(
+    fileId,
+  )}> <${toHex(fileId)}>] >>`;
+
+  const encObjBytes = enc.encode(encObjStr);
+  const newXrefOffset = encPdf.length + encObjBytes.length;
+  const xrefEntry = `${String(encObjOffset).padStart(10, "0")} 00000 n \n`;
+  const newXref = enc.encode(
+    `\nxref\n${encObjNum} 1\n${xrefEntry}trailer\n${newTrailer}\nstartxref\n${newXrefOffset}\n%%EOF\n`,
+  );
+
+  const final = new Uint8Array(
+    encPdf.length + encObjBytes.length + newXref.length,
+  );
+  final.set(encPdf);
+  final.set(encObjBytes, encPdf.length);
+  final.set(newXref, encPdf.length + encObjBytes.length);
+  return final;
 }

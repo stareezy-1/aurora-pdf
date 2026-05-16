@@ -18,6 +18,9 @@ const TOOL_NAMES: ToolName[] = [
   "watermark",
   "split",
   "split-zip",
+  "html-to-pdf",
+  "organize",
+  "protect",
 ];
 
 const EXPECTED_SUFFIXES: Record<ToolName, string> = {
@@ -33,6 +36,9 @@ const EXPECTED_SUFFIXES: Record<ToolName, string> = {
   watermark: "_watermarked.pdf",
   split: "_split.pdf",
   "split-zip": "_split_parts.zip",
+  "html-to-pdf": "_converted.pdf",
+  organize: "_organized.pdf",
+  protect: "_protected.pdf",
 };
 
 describe("Property 12: output filename generation follows the tool pattern", () => {

@@ -13,6 +13,7 @@ All file processing in AuroraPDF is performed exclusively in the browser's memor
 | mammoth        | 1.8.0          | No network requests. Converts .docx to HTML entirely in memory.                                                       |
 | docx           | 8.5.0          | No network requests. Generates .docx files entirely in memory.                                                        |
 | jszip          | 3.10.1         | No network requests. Creates ZIP archives entirely in memory.                                                         |
+| html2canvas    | 1.4.1          | No outbound network requests — renders DOM to canvas locally.                                                         |
 
 ## Verification
 

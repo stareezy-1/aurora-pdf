@@ -1,11 +1,16 @@
+import React from "react";
 import { ToolLayout } from "@/components/ToolLayout/ToolLayout";
 import { FileDropZone } from "@/components/FileDropZone/FileDropZone";
 import { ProgressPanel } from "@/components/ProgressPanel/ProgressPanel";
 import { PrivacyShield } from "@/components/PrivacyShield/PrivacyShield";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useAuroraStore } from "@/stores/aurora.store";
+import { useDragOverlay } from "@/hooks/useDragOverlay";
 import { useEditPdf } from "./hooks/useEditPdf";
 import type { Tool } from "./hooks/useEditPdf";
+import type { Overlay } from "./hooks/useEditPdf";
+
+type EditPdfVm = ReturnType<typeof useEditPdf>;
 
 const PDF_ACCEPT = [{ mime: "application/pdf", extension: ".pdf" }];
 
@@ -15,6 +20,10 @@ const TOOL_BUTTONS: { id: Tool; label: string; icon: string }[] = [
   { id: "image", label: "Image", icon: "🖼" },
   { id: "sign", label: "Sign", icon: "✍️" },
   { id: "watermark", label: "Watermark", icon: "💧" },
+  { id: "draw", label: "Draw", icon: "✏" },
+  { id: "shape", label: "Shape", icon: "⬜" },
+  { id: "ocr-edit", label: "OCR Edit", icon: "🔍" },
+  { id: "page-numbers", label: "Page #", icon: "🔢" },
 ];
 
 const FONT_OPTIONS = [
@@ -31,6 +40,356 @@ const FONT_OPTIONS = [
   { value: "Garamond", label: "Garamond" },
   { value: "Bookman", label: "Bookman" },
 ];
+
+// ── DrawCanvas ───────────────────────────────────────────────────────────────
+// Transparent canvas overlay for freehand drawing. Positioned absolutely over
+// the page image. Mouse and touch events are handled directly on the canvas.
+
+function DrawCanvas({ vm }: { vm: EditPdfVm }) {
+  // Sync canvas buffer dimensions to its rendered CSS size so strokes aren't
+  // stretched. We observe the canvas element's bounding rect on mount and
+  // whenever the window resizes.
+  const syncSize = (canvas: HTMLCanvasElement | null) => {
+    if (!canvas) return;
+    const { width, height } = canvas.getBoundingClientRect();
+    if (
+      canvas.width !== Math.round(width) ||
+      canvas.height !== Math.round(height)
+    ) {
+      canvas.width = Math.round(width);
+      canvas.height = Math.round(height);
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    syncSize(e.currentTarget);
+    const rect = e.currentTarget.getBoundingClientRect();
+    vm.startDraw(e.clientX - rect.left, e.clientY - rect.top);
+  };
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!vm.isDrawing) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    vm.continueDraw(e.clientX - rect.left, e.clientY - rect.top);
+  };
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    syncSize(e.currentTarget);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const t = e.touches[0];
+    vm.startDraw(t.clientX - rect.left, t.clientY - rect.top);
+  };
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (!vm.isDrawing) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const t = e.touches[0];
+    vm.continueDraw(t.clientX - rect.left, t.clientY - rect.top);
+  };
+
+  return (
+    <canvas
+      ref={vm.drawCanvasRef}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        cursor: "crosshair",
+        touchAction: "none",
+        // Transparent background so the page image shows through
+        background: "transparent",
+        zIndex: 10,
+      }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={vm.endDraw}
+      onMouseLeave={vm.endDraw}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={vm.endDraw}
+      aria-label="Freehand drawing canvas"
+    />
+  );
+}
+
+// ── PendingShapeOverlay ───────────────────────────────────────────────────────
+// Draggable/resizable shape overlay placed on the page before committing.
+
+function PendingShapeOverlay({ vm }: { vm: EditPdfVm }) {
+  const shape = vm.pendingShape!;
+  // Snapshot the shape position at drag/resize start so deltas are applied correctly
+  const dragOriginRef = React.useRef<{ x: number; y: number } | null>(null);
+  const resizeOriginRef = React.useRef<{ w: number; h: number } | null>(null);
+
+  const dragHandlers = useDragOverlay({
+    onDrag: ({ dx, dy }) => {
+      if (!dragOriginRef.current) return;
+      vm.setPendingShape((prev) =>
+        prev
+          ? {
+              ...prev,
+              x: dragOriginRef.current!.x + dx,
+              y: dragOriginRef.current!.y + dy,
+            }
+          : prev,
+      );
+    },
+    onDragEnd: () => {
+      dragOriginRef.current = null;
+    },
+  });
+
+  const resizeHandlers = useDragOverlay({
+    onDrag: ({ dx, dy }) => {
+      if (!resizeOriginRef.current) return;
+      vm.setPendingShape((prev) =>
+        prev
+          ? {
+              ...prev,
+              width: Math.max(20, resizeOriginRef.current!.w + dx),
+              height: Math.max(20, resizeOriginRef.current!.h + dy),
+            }
+          : prev,
+      );
+    },
+    onDragEnd: () => {
+      resizeOriginRef.current = null;
+    },
+  });
+
+  const shapePreview = () => {
+    const s = vm.shapeType;
+    const stroke = vm.shapeStrokeColor;
+    const fill = vm.shapeFillColor ?? "transparent";
+    const sw = vm.shapeStrokeWidth;
+    if (s === "rectangle") {
+      return (
+        <svg
+          width="100%"
+          height="100%"
+          style={{ position: "absolute", inset: 0, overflow: "visible" }}
+        >
+          <rect
+            x={sw / 2}
+            y={sw / 2}
+            width={`calc(100% - ${sw}px)`}
+            height={`calc(100% - ${sw}px)`}
+            stroke={stroke}
+            strokeWidth={sw}
+            fill={fill}
+          />
+        </svg>
+      );
+    }
+    if (s === "circle") {
+      return (
+        <svg
+          width="100%"
+          height="100%"
+          style={{ position: "absolute", inset: 0, overflow: "visible" }}
+        >
+          <ellipse
+            cx="50%"
+            cy="50%"
+            rx={`calc(50% - ${sw / 2}px)`}
+            ry={`calc(50% - ${sw / 2}px)`}
+            stroke={stroke}
+            strokeWidth={sw}
+            fill={fill}
+          />
+        </svg>
+      );
+    }
+    // line
+    return (
+      <svg
+        width="100%"
+        height="100%"
+        style={{ position: "absolute", inset: 0, overflow: "visible" }}
+      >
+        <line
+          x1="0"
+          y1="0"
+          x2="100%"
+          y2="100%"
+          stroke={stroke}
+          strokeWidth={sw}
+        />
+      </svg>
+    );
+  };
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: shape.x,
+        top: shape.y,
+        width: shape.width,
+        height: shape.height,
+        cursor: "move",
+        zIndex: 10,
+        boxSizing: "border-box",
+      }}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        dragOriginRef.current = { x: shape.x, y: shape.y };
+        dragHandlers.onMouseDown(e);
+      }}
+      onTouchStart={(e) => {
+        e.stopPropagation();
+        dragOriginRef.current = { x: shape.x, y: shape.y };
+        dragHandlers.onTouchStart(e);
+      }}
+      aria-label="Pending shape overlay"
+    >
+      {shapePreview()}
+      {/* Resize handle */}
+      <div
+        style={{
+          position: "absolute",
+          right: -6,
+          bottom: -6,
+          width: 12,
+          height: 12,
+          background: "var(--green)",
+          borderRadius: 2,
+          cursor: "se-resize",
+          zIndex: 11,
+        }}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          resizeOriginRef.current = { w: shape.width, h: shape.height };
+          resizeHandlers.onMouseDown(e);
+        }}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          resizeOriginRef.current = { w: shape.width, h: shape.height };
+          resizeHandlers.onTouchStart(e);
+        }}
+        aria-label="Resize shape"
+      />
+    </div>
+  );
+}
+
+// ── OverlayItem ──────────────────────────────────────────────────────────────
+// Extracted into its own component so useDragOverlay can be called per-overlay
+// (hooks cannot be called inside a .map() callback).
+
+interface OverlayItemProps {
+  ov: Overlay;
+  isSelected: boolean;
+  wmText: string;
+  wmOpacity: number;
+  wmRotation: number;
+  onSelect: (id: string) => void;
+  onDragStart: (id: string) => void;
+  onDragMove: (id: string, dx: number, dy: number) => void;
+  onDragEnd: () => void;
+  onResizeStart: (id: string) => void;
+  onResizeMove: (id: string, dx: number, dy: number) => void;
+  onResizeEnd: () => void;
+}
+
+function OverlayItem({
+  ov,
+  isSelected,
+  wmText,
+  wmOpacity,
+  wmRotation,
+  onSelect,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onResizeStart,
+  onResizeMove,
+  onResizeEnd,
+}: OverlayItemProps) {
+  const dragHandlers = useDragOverlay({
+    onDrag: ({ dx, dy }) => onDragMove(ov.id, dx, dy),
+    onDragEnd,
+  });
+
+  const resizeHandlers = useDragOverlay({
+    onDrag: ({ dx, dy }) => onResizeMove(ov.id, dx, dy),
+    onDragEnd: onResizeEnd,
+  });
+
+  return (
+    <div
+      className={`editor-overlay-item${isSelected ? " selected" : ""}`}
+      style={{
+        left: ov.x,
+        top: ov.y,
+        width: ov.width,
+        height: ov.height,
+      }}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        onDragStart(ov.id);
+        dragHandlers.onMouseDown(e);
+      }}
+      onTouchStart={(e) => {
+        e.stopPropagation();
+        onDragStart(ov.id);
+        dragHandlers.onTouchStart(e);
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect(ov.id);
+      }}
+    >
+      {ov.type === "text" && (
+        <span
+          style={{
+            fontSize: ov.fontSize,
+            color: ov.color,
+            fontFamily: ov.fontFamily ?? "Helvetica",
+            opacity: ov.text === wmText ? wmOpacity / 100 : 1,
+            transform:
+              ov.text === wmText ? `rotate(-${wmRotation}deg)` : "none",
+            transformOrigin: "center",
+            whiteSpace: "pre",
+            pointerEvents: "none",
+            display: "block",
+            lineHeight: 1.2,
+          }}
+        >
+          {ov.text}
+        </span>
+      )}
+      {ov.type === "image" && ov.dataUrl && (
+        <img
+          src={ov.dataUrl}
+          alt="Inserted"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            pointerEvents: "none",
+          }}
+          draggable={false}
+        />
+      )}
+      {isSelected && (
+        <div
+          className="resize-handle"
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            onResizeStart(ov.id);
+            resizeHandlers.onMouseDown(e);
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            onResizeStart(ov.id);
+            resizeHandlers.onTouchStart(e);
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
 export default function EditPdfPage() {
   usePageTitle("Edit PDF");
@@ -67,7 +426,7 @@ export default function EditPdfPage() {
             status={vm.status}
             outputFilename={vm.outputFilename ?? undefined}
             blobUrl={vm.resultBlobUrl}
-            onDownload={vm.clearWorkbox}
+            onDownload={vm.handleReset}
             onReset={vm.handleReset}
           />
         )}
@@ -427,6 +786,440 @@ export default function EditPdfPage() {
               </div>
             )}
 
+            {/* ── Draw options ── */}
+            {vm.activeTool === "draw" && (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <div
+                  style={{ display: "flex", gap: 10, alignItems: "flex-end" }}
+                >
+                  <div>
+                    <label className="label" htmlFor="draw-color">
+                      Stroke color
+                    </label>
+                    <input
+                      id="draw-color"
+                      type="color"
+                      value={vm.drawStrokeColor}
+                      onChange={(e) => vm.setDrawStrokeColor(e.target.value)}
+                      style={{
+                        width: 40,
+                        height: 32,
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-sm)",
+                        cursor: "pointer",
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="label">
+                      Width:{" "}
+                      <span style={{ color: "var(--green)" }}>
+                        {vm.drawStrokeWidth}px
+                      </span>
+                    </label>
+                    <div className="slider-wrap">
+                      <input
+                        type="range"
+                        min={1}
+                        max={20}
+                        value={vm.drawStrokeWidth}
+                        onChange={(e) =>
+                          vm.setDrawStrokeWidth(Number(e.target.value))
+                        }
+                        aria-label="Stroke width"
+                      />
+                      <span className="slider-val">{vm.drawStrokeWidth}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="alert alert-info" style={{ fontSize: 12 }}>
+                  Draw freehand on the page preview
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={vm.commitDrawing}
+                    aria-label="Commit drawing to PDF"
+                  >
+                    ✓ Commit Drawing
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={vm.clearDrawCanvas}
+                    aria-label="Clear drawing canvas"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Shape options ── */}
+            {vm.activeTool === "shape" && (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <div>
+                  <div className="label">Shape type</div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {(["rectangle", "circle", "line"] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => vm.setShapeType(t)}
+                        aria-pressed={vm.shapeType === t}
+                        style={{
+                          flex: 1,
+                          padding: "5px 4px",
+                          borderRadius: "var(--radius-sm)",
+                          border: "1px solid var(--border)",
+                          background:
+                            vm.shapeType === t
+                              ? "rgba(0,255,136,0.12)"
+                              : "var(--surface-2)",
+                          color:
+                            vm.shapeType === t
+                              ? "var(--green)"
+                              : "var(--text-2)",
+                          cursor: "pointer",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          fontFamily: "var(--font)",
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div
+                  style={{ display: "flex", gap: 10, alignItems: "flex-end" }}
+                >
+                  <div>
+                    <label className="label" htmlFor="shape-stroke-color">
+                      Stroke
+                    </label>
+                    <input
+                      id="shape-stroke-color"
+                      type="color"
+                      value={vm.shapeStrokeColor}
+                      onChange={(e) => vm.setShapeStrokeColor(e.target.value)}
+                      style={{
+                        width: 40,
+                        height: 32,
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-sm)",
+                        cursor: "pointer",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="shape-fill-color">
+                      Fill
+                    </label>
+                    <div
+                      style={{ display: "flex", gap: 4, alignItems: "center" }}
+                    >
+                      <input
+                        id="shape-fill-color"
+                        type="color"
+                        value={vm.shapeFillColor ?? "#ffffff"}
+                        onChange={(e) => vm.setShapeFillColor(e.target.value)}
+                        disabled={vm.shapeFillColor === null}
+                        style={{
+                          width: 40,
+                          height: 32,
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-sm)",
+                          cursor:
+                            vm.shapeFillColor === null
+                              ? "not-allowed"
+                              : "pointer",
+                          opacity: vm.shapeFillColor === null ? 0.4 : 1,
+                        }}
+                      />
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 11,
+                          color: "var(--text-2)",
+                          cursor: "pointer",
+                          userSelect: "none",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={vm.shapeFillColor === null}
+                          onChange={(e) =>
+                            vm.setShapeFillColor(
+                              e.target.checked ? null : "#ffffff",
+                            )
+                          }
+                          aria-label="No fill"
+                        />
+                        None
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="label">
+                    Stroke width:{" "}
+                    <span style={{ color: "var(--green)" }}>
+                      {vm.shapeStrokeWidth}pt
+                    </span>
+                  </label>
+                  <div className="slider-wrap">
+                    <input
+                      type="range"
+                      min={1}
+                      max={20}
+                      value={vm.shapeStrokeWidth}
+                      onChange={(e) =>
+                        vm.setShapeStrokeWidth(Number(e.target.value))
+                      }
+                      aria-label="Shape stroke width"
+                    />
+                    <span className="slider-val">{vm.shapeStrokeWidth}</span>
+                  </div>
+                </div>
+                <div className="alert alert-info" style={{ fontSize: 12 }}>
+                  Click on the page to place a shape
+                </div>
+                {vm.pendingShape && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={vm.commitShape}
+                    aria-label="Commit shape to PDF"
+                  >
+                    ✓ Commit Shape
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ── OCR Edit options ── */}
+            {vm.activeTool === "ocr-edit" && (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={vm.runOcrOnPage}
+                  disabled={vm.ocrLoading || !vm.pagePreviews[vm.currentPage]}
+                  aria-label="Run OCR on current page"
+                >
+                  {vm.ocrLoading ? "⏳ Running OCR…" : "🔍 Run OCR"}
+                </button>
+
+                {vm.ocrLoading && (
+                  <div className="alert alert-info" style={{ fontSize: 12 }}>
+                    Detecting text on page {vm.currentPage + 1}…
+                  </div>
+                )}
+
+                {!vm.ocrLoading && vm.ocrWords.length === 0 && (
+                  <div className="alert alert-info" style={{ fontSize: 12 }}>
+                    Click "Run OCR" to detect text on the current page, then
+                    click a highlighted word to edit it.
+                  </div>
+                )}
+
+                {!vm.ocrLoading &&
+                  vm.ocrWords.length > 0 &&
+                  !vm.selectedOcrWord && (
+                    <div className="alert alert-info" style={{ fontSize: 12 }}>
+                      {vm.ocrWords.length} word
+                      {vm.ocrWords.length !== 1 ? "s" : ""} detected. Click a
+                      highlighted word on the page to edit it.
+                    </div>
+                  )}
+
+                {vm.selectedOcrWord && (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  >
+                    <div>
+                      <label className="label" htmlFor="ocr-edit-text">
+                        Edit detected word
+                      </label>
+                      <input
+                        id="ocr-edit-text"
+                        className="input-field"
+                        value={vm.ocrEditText}
+                        onChange={(e) => vm.setOcrEditText(e.target.value)}
+                        placeholder="Replacement text…"
+                        autoFocus
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={vm.commitOcrEdit}
+                        disabled={!vm.ocrEditText.trim()}
+                        aria-label="Confirm OCR text edit"
+                      >
+                        ✓ Confirm Edit
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => {
+                          vm.setSelectedOcrWord(null);
+                          vm.setOcrEditText("");
+                        }}
+                        aria-label="Cancel OCR edit"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Page Numbers options ── */}
+            {vm.activeTool === "page-numbers" && (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <div>
+                  <label className="label" htmlFor="pagenum-position">
+                    Position
+                  </label>
+                  <select
+                    id="pagenum-position"
+                    className="select-field"
+                    value={vm.pageNumPosition}
+                    onChange={(e) =>
+                      vm.setPageNumPosition(
+                        e.target.value as
+                          | "bottom-center"
+                          | "bottom-left"
+                          | "bottom-right"
+                          | "top-center",
+                      )
+                    }
+                    aria-label="Page number position"
+                  >
+                    <option value="bottom-center">Bottom Center</option>
+                    <option value="bottom-left">Bottom Left</option>
+                    <option value="bottom-right">Bottom Right</option>
+                    <option value="top-center">Top Center</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="label">Format</div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {(["1", "Page 1", "1/N"] as const).map((fmt) => (
+                      <button
+                        key={fmt}
+                        onClick={() => vm.setPageNumFormat(fmt)}
+                        aria-pressed={vm.pageNumFormat === fmt}
+                        style={{
+                          flex: 1,
+                          padding: "5px 4px",
+                          borderRadius: "var(--radius-sm)",
+                          border: "1px solid var(--border)",
+                          background:
+                            vm.pageNumFormat === fmt
+                              ? "rgba(0,255,136,0.12)"
+                              : "var(--surface-2)",
+                          color:
+                            vm.pageNumFormat === fmt
+                              ? "var(--green)"
+                              : "var(--text-2)",
+                          cursor: "pointer",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          fontFamily: "var(--font)",
+                        }}
+                      >
+                        {fmt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="pagenum-font">
+                    Font family
+                  </label>
+                  <select
+                    id="pagenum-font"
+                    className="select-field"
+                    value={vm.pageNumFont}
+                    onChange={(e) => vm.setPageNumFont(e.target.value)}
+                    aria-label="Page number font family"
+                  >
+                    {FONT_OPTIONS.map((f) => (
+                      <option key={f.value} value={f.value}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">
+                    Font size:{" "}
+                    <span style={{ color: "var(--green)" }}>
+                      {vm.pageNumSize}pt
+                    </span>
+                  </label>
+                  <div className="slider-wrap">
+                    <input
+                      type="range"
+                      min={8}
+                      max={144}
+                      value={vm.pageNumSize}
+                      onChange={(e) =>
+                        vm.setPageNumSize(Number(e.target.value))
+                      }
+                      aria-label="Page number font size"
+                    />
+                    <span className="slider-val">{vm.pageNumSize}</span>
+                  </div>
+                </div>
+
+                <div
+                  style={{ display: "flex", gap: 10, alignItems: "flex-end" }}
+                >
+                  <div>
+                    <label className="label" htmlFor="pagenum-color">
+                      Color
+                    </label>
+                    <input
+                      id="pagenum-color"
+                      type="color"
+                      value={vm.pageNumColor}
+                      onChange={(e) => vm.setPageNumColor(e.target.value)}
+                      style={{
+                        width: 40,
+                        height: 32,
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-sm)",
+                        cursor: "pointer",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={vm.applyPageNumbersTool}
+                  disabled={!vm.pdfBytes}
+                  aria-label="Apply page numbers to all pages"
+                >
+                  🔢 Apply Page Numbers
+                </button>
+              </div>
+            )}
+
             {/* ── Selected overlay editor ── */}
             {vm.selectedId &&
               (() => {
@@ -621,7 +1414,9 @@ export default function EditPdfPage() {
               {TOOL_BUTTONS.map(({ id, icon }) => (
                 <button
                   key={id}
-                  className={`btn btn-sm${vm.activeTool === id ? " btn-purple" : " btn-secondary"}`}
+                  className={`btn btn-sm${
+                    vm.activeTool === id ? " btn-purple" : " btn-secondary"
+                  }`}
                   onClick={() => vm.setActiveTool(id)}
                   aria-pressed={vm.activeTool === id}
                   title={id}
@@ -637,6 +1432,7 @@ export default function EditPdfPage() {
               className="editor-page-wrap"
               style={{
                 cursor: vm.activeTool === "select" ? "default" : "crosshair",
+                position: "relative",
               }}
               onClick={vm.handleCanvasClick}
             >
@@ -647,65 +1443,82 @@ export default function EditPdfPage() {
                 draggable={false}
               />
 
+              {/* Draw canvas overlay — transparent, sits on top of page image */}
+              {vm.activeTool === "draw" && <DrawCanvas vm={vm} />}
+
+              {/* Shape overlay — draggable/resizable pending shape */}
+              {vm.activeTool === "shape" && vm.pendingShape && (
+                <PendingShapeOverlay vm={vm} />
+              )}
+
               {/* Overlays */}
               {vm.currentOverlays.map((ov) => (
-                <div
+                <OverlayItem
                   key={ov.id}
-                  className={`editor-overlay-item${vm.selectedId === ov.id ? " selected" : ""}`}
-                  style={{
-                    left: ov.x,
-                    top: ov.y,
-                    width: ov.width,
-                    height: ov.height,
-                  }}
-                  onMouseDown={(e) => vm.startOverlayDrag(e, ov.id)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    vm.setSelectedId(ov.id);
-                  }}
-                >
-                  {ov.type === "text" && (
-                    <span
-                      style={{
-                        fontSize: ov.fontSize,
-                        color: ov.color,
-                        fontFamily: ov.fontFamily ?? "Helvetica",
-                        opacity: ov.text === vm.wmText ? vm.wmOpacity / 100 : 1,
-                        transform:
-                          ov.text === vm.wmText
-                            ? `rotate(-${vm.wmRotation}deg)`
-                            : "none",
-                        transformOrigin: "center",
-                        whiteSpace: "pre",
-                        pointerEvents: "none",
-                        display: "block",
-                        lineHeight: 1.2,
-                      }}
-                    >
-                      {ov.text}
-                    </span>
-                  )}
-                  {ov.type === "image" && ov.dataUrl && (
-                    <img
-                      src={ov.dataUrl}
-                      alt="Inserted"
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                        pointerEvents: "none",
-                      }}
-                      draggable={false}
-                    />
-                  )}
-                  {vm.selectedId === ov.id && (
-                    <div
-                      className="resize-handle"
-                      onMouseDown={(e) => vm.startOverlayResize(e, ov.id)}
-                    />
-                  )}
-                </div>
+                  ov={ov}
+                  isSelected={vm.selectedId === ov.id}
+                  wmText={vm.wmText}
+                  wmOpacity={vm.wmOpacity}
+                  wmRotation={vm.wmRotation}
+                  onSelect={vm.setSelectedId}
+                  onDragStart={vm.beginOverlayDrag}
+                  onDragMove={vm.moveOverlayDrag}
+                  onDragEnd={vm.endOverlayDrag}
+                  onResizeStart={vm.beginOverlayResize}
+                  onResizeMove={vm.moveOverlayResize}
+                  onResizeEnd={vm.endOverlayResize}
+                />
               ))}
+
+              {/* OCR word bounding box highlights */}
+              {vm.activeTool === "ocr-edit" &&
+                vm.ocrWords.length > 0 &&
+                vm.ocrWords.map((word, idx) => {
+                  const isSelected =
+                    vm.selectedOcrWord !== null &&
+                    vm.selectedOcrWord.text === word.text &&
+                    vm.selectedOcrWord.bbox.x0 === word.bbox.x0 &&
+                    vm.selectedOcrWord.bbox.y0 === word.bbox.y0;
+                  return (
+                    <div
+                      key={idx}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`OCR word: ${word.text}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        vm.setSelectedOcrWord(word);
+                        vm.setOcrEditText(word.text);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          vm.setSelectedOcrWord(word);
+                          vm.setOcrEditText(word.text);
+                        }
+                      }}
+                      style={{
+                        position: "absolute",
+                        left: word.bbox.x0,
+                        top: word.bbox.y0,
+                        width: word.bbox.x1 - word.bbox.x0,
+                        height: word.bbox.y1 - word.bbox.y0,
+                        background: isSelected
+                          ? "rgba(0, 255, 136, 0.35)"
+                          : "rgba(255, 220, 0, 0.30)",
+                        border: isSelected
+                          ? "2px solid var(--green)"
+                          : "1px solid rgba(255, 180, 0, 0.7)",
+                        borderRadius: 2,
+                        cursor: "pointer",
+                        boxSizing: "border-box",
+                        zIndex: 20,
+                        transition: "background 0.1s, border 0.1s",
+                      }}
+                      title={word.text}
+                    />
+                  );
+                })}
             </div>
           ) : (
             <div

@@ -95,9 +95,11 @@ export async function pdfToDocx(
 
   onProgress(90, "Building .docx…");
   const wordDoc = new Document({ sections: [{ children: paragraphs }] });
-  const buffer = await Packer.toBuffer(wordDoc);
+  // Use toBlob() — Packer.toBuffer() requires Node.js Buffer which isn't available in browsers
+  const blob = await Packer.toBlob(wordDoc);
+  const arrayBuffer = await blob.arrayBuffer();
   onProgress(100, "Done");
-  return new Uint8Array(buffer);
+  return new Uint8Array(arrayBuffer);
 }
 
 // ---------------------------------------------------------------------------

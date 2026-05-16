@@ -17,6 +17,9 @@ const TOOL_LINKS = [
   { path: "/sign", label: "Sign PDF", icon: "✍️" },
   { path: "/watermark", label: "Add Watermark", icon: "💧" },
   { path: "/split", label: "Split PDF", icon: "✂️" },
+  { path: "/html-to-pdf", label: "HTML to PDF", icon: "🌐" },
+  { path: "/organize", label: "Organize PDF", icon: "📑" },
+  { path: "/protect", label: "Protect PDF", icon: "🔐" },
 ];
 
 const STATUS_CONFIG = {
@@ -167,7 +170,9 @@ export function NavBar({ currentPath }: NavBarProps) {
           )}
           <button
             onClick={toggleTheme}
-            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+            aria-label={`Switch to ${
+              theme === "dark" ? "light" : "dark"
+            } theme`}
             style={{
               background: "var(--surface-2)",
               border: "1px solid var(--border)",
@@ -260,7 +265,9 @@ export function NavBar({ currentPath }: NavBarProps) {
               key={path}
               to={path}
               role="listitem"
-              className={`nav-drawer-link${currentPath === path ? " active" : ""}`}
+              className={`nav-drawer-link${
+                currentPath === path ? " active" : ""
+              }`}
               aria-current={currentPath === path ? "page" : undefined}
             >
               <span style={{ fontSize: 18, width: 28, textAlign: "center" }}>
@@ -299,7 +306,9 @@ export function NavBar({ currentPath }: NavBarProps) {
           )}
           <button
             onClick={toggleTheme}
-            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+            aria-label={`Switch to ${
+              theme === "dark" ? "light" : "dark"
+            } theme`}
             className="btn btn-secondary"
             style={{ width: "100%" }}
           >

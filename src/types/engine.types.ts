@@ -27,9 +27,23 @@ export interface TextAnnotation {
   y: number; // points from bottom
   fontSize: number; // 8–144
   color: string; // hex
+  rotation?: number; // degrees (optional, default 0)
+  opacity?: number; // 0–100 percent (optional, default 100)
 }
 
 export interface OcrPageResult {
   text: string;
   imageIndex: number;
+}
+
+export interface ShapeAnnotation {
+  pageIndex: number;
+  type: "rectangle" | "circle" | "line";
+  x: number; // points from left
+  y: number; // points from bottom
+  width: number;
+  height: number;
+  strokeColor: string; // hex
+  fillColor: string | null; // hex or null for no fill
+  strokeWidth: number; // pt
 }

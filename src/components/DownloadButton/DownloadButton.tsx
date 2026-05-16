@@ -1,4 +1,5 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { ClearModal } from "@/components/ClearModal/ClearModal";
 import type { DownloadButtonProps } from "./DownloadButton.types";
 
 export function DownloadButton({
@@ -8,12 +9,21 @@ export function DownloadButton({
   disabled = false,
 }: DownloadButtonProps) {
   const anchorRef = useRef<HTMLAnchorElement>(null);
+  const [showModal, setShowModal] = useState(false);
   const isDisabled = disabled || !blobUrl;
 
   function handleClick() {
     if (!blobUrl || isDisabled) return;
+    // Trigger the actual browser download immediately
     anchorRef.current?.click();
-    setTimeout(onDownloadComplete, 2000);
+    // Show the animated modal
+    setShowModal(true);
+  }
+
+  function handleModalComplete() {
+    setShowModal(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    onDownloadComplete();
   }
 
   return (
@@ -33,6 +43,9 @@ export function DownloadButton({
       >
         ⬇ Download {filename}
       </button>
+      {showModal && filename && (
+        <ClearModal filename={filename} onComplete={handleModalComplete} />
+      )}
     </>
   );
 }

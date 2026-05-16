@@ -26,7 +26,7 @@ export function usePdfToWord() {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const bytes2 = await pdfToDocx(bytes, onProgress);
       return {
-        blob: new Blob([bytes2], {
+        blob: new Blob([bytes2 as any], {
           type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         }),
         filename: buildOutputFilename(file.name, "pdf-to-word"),

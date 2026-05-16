@@ -11,6 +11,7 @@ const TOOL_COLS = [
       { label: "PDF to JPG", path: "/pdf-to-jpg" },
       { label: "Word to PDF", path: "/word-to-pdf" },
       { label: "Excel to PDF", path: "/excel-to-pdf" },
+      { label: "HTML to PDF", path: "/html-to-pdf" },
     ],
   },
   {
@@ -21,6 +22,8 @@ const TOOL_COLS = [
       { label: "Sign PDF", path: "/sign" },
       { label: "Add Watermark", path: "/watermark" },
       { label: "Split PDF", path: "/split" },
+      { label: "Organize PDF", path: "/organize" },
+      { label: "Protect PDF", path: "/protect" },
     ],
   },
   {
@@ -145,7 +148,7 @@ export function Footer() {
             <span style={{ fontSize: 12, opacity: 0.8 }}>↗</span>
           </a>
           {/* stareezy-ui badge */}
-          <a
+          {/* <a
             href={config.uiAppUrl}
             target="_blank"
             rel="noopener noreferrer"
@@ -162,7 +165,6 @@ export function Footer() {
               fontSize: 12,
               fontWeight: 600,
               marginTop: 4,
-              marginLeft: 16,
               transition: "all 0.2s",
             }}
             onMouseEnter={(e) => {
@@ -177,7 +179,7 @@ export function Footer() {
             <span>⚡</span>
             Built with stareezy-ui
             <span style={{ fontSize: 10, opacity: 0.7 }}>↗</span>
-          </a>
+          </a> */}
         </div>
 
         {/* Tool columns */}

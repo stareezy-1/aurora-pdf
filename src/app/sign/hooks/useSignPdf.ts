@@ -38,6 +38,8 @@ export function useSignPdf() {
   const [method, setMethod] = useState<SignatureMethod>("draw");
   const [sigDataUrl, setSigDataUrl] = useState<string | null>(null);
   const [typedName, setTypedName] = useState("");
+  const [typedSigFont, setTypedSigFont] = useState("Georgia");
+  const [typedSigSize, setTypedSigSize] = useState(38);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [overlay, setOverlay] = useState<SigOverlay>({
@@ -46,18 +48,8 @@ export function useSignPdf() {
     width: 200,
     height: 80,
   });
-  const dragRef = useRef<{
-    startX: number;
-    startY: number;
-    origX: number;
-    origY: number;
-  } | null>(null);
-  const resizeRef = useRef<{
-    startX: number;
-    startY: number;
-    origW: number;
-    origH: number;
-  } | null>(null);
+  const overlayDragOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const overlayResizeOriginRef = useRef<{ w: number; h: number } | null>(null);
 
   const processor = useFileProcessor({
     process: async (file, onProgress) => {
@@ -77,6 +69,8 @@ export function useSignPdf() {
         method,
         dataUrl: sigDataUrl,
         typedName: typedName || null,
+        fontFamily: typedSigFont,
+        fontSize: typedSigSize,
         pageIndex,
         x: (overlay.x * scaleX) / imgW,
         y: (overlay.y * scaleY) / imgH,
@@ -85,7 +79,7 @@ export function useSignPdf() {
       });
       onProgress(100);
       return {
-        blob: new Blob([result], { type: "application/pdf" }),
+        blob: new Blob([result as any], { type: "application/pdf" }),
         filename: buildOutputFilename(file.name, "sign"),
       };
     },
@@ -136,7 +130,7 @@ export function useSignPdf() {
     if (!canvas || !typedName) return;
     const ctx = canvas.getContext("2d")!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = '38px Georgia, "Times New Roman", serif';
+    ctx.font = `${typedSigSize}px ${typedSigFont}, serif`;
     ctx.fillStyle = "#1a1a2e";
     ctx.fillText(typedName, 12, 56);
     setSigDataUrl(canvas.toDataURL("image/png"));
@@ -162,67 +156,51 @@ export function useSignPdf() {
     setSigDataUrl(null);
   }
 
-  const startOverlayDrag = useCallback(
-    (e: React.MouseEvent) => {
+  // ── Overlay drag ────────────────────────────────────────────────────────
+
+  const beginOverlayDrag = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
       e.stopPropagation();
-      dragRef.current = {
-        startX: e.clientX,
-        startY: e.clientY,
-        origX: overlay.x,
-        origY: overlay.y,
-      };
-      const onMove = (ev: MouseEvent) => {
-        if (!dragRef.current) return;
-        setOverlay((prev) => ({
-          ...prev,
-          x: dragRef.current!.origX + ev.clientX - dragRef.current!.startX,
-          y: dragRef.current!.origY + ev.clientY - dragRef.current!.startY,
-        }));
-      };
-      const onUp = () => {
-        dragRef.current = null;
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-      };
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
+      overlayDragOriginRef.current = { x: overlay.x, y: overlay.y };
     },
-    [overlay],
+    [overlay.x, overlay.y],
   );
 
-  const startOverlayResize = useCallback(
-    (e: React.MouseEvent) => {
+  const moveOverlayDrag = useCallback((delta: { dx: number; dy: number }) => {
+    if (!overlayDragOriginRef.current) return;
+    setOverlay((prev) => ({
+      ...prev,
+      x: overlayDragOriginRef.current!.x + delta.dx,
+      y: overlayDragOriginRef.current!.y + delta.dy,
+    }));
+  }, []);
+
+  const endOverlayDrag = useCallback(() => {
+    overlayDragOriginRef.current = null;
+  }, []);
+
+  // ── Overlay resize ───────────────────────────────────────────────────────
+
+  const beginOverlayResize = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
       e.stopPropagation();
-      resizeRef.current = {
-        startX: e.clientX,
-        startY: e.clientY,
-        origW: overlay.width,
-        origH: overlay.height,
-      };
-      const onMove = (ev: MouseEvent) => {
-        if (!resizeRef.current) return;
-        setOverlay((prev) => ({
-          ...prev,
-          width: Math.max(
-            60,
-            resizeRef.current!.origW + ev.clientX - resizeRef.current!.startX,
-          ),
-          height: Math.max(
-            30,
-            resizeRef.current!.origH + ev.clientY - resizeRef.current!.startY,
-          ),
-        }));
-      };
-      const onUp = () => {
-        resizeRef.current = null;
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-      };
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
+      overlayResizeOriginRef.current = { w: overlay.width, h: overlay.height };
     },
-    [overlay],
+    [overlay.width, overlay.height],
   );
+
+  const moveOverlayResize = useCallback((delta: { dx: number; dy: number }) => {
+    if (!overlayResizeOriginRef.current) return;
+    setOverlay((prev) => ({
+      ...prev,
+      width: Math.max(60, overlayResizeOriginRef.current!.w + delta.dx),
+      height: Math.max(30, overlayResizeOriginRef.current!.h + delta.dy),
+    }));
+  }, []);
+
+  const endOverlayResize = useCallback(() => {
+    overlayResizeOriginRef.current = null;
+  }, []);
 
   function handleReset() {
     clearWorkbox();
@@ -251,6 +229,10 @@ export function useSignPdf() {
     setSigDataUrl,
     typedName,
     setTypedName,
+    typedSigFont,
+    setTypedSigFont,
+    typedSigSize,
+    setTypedSigSize,
     canvasRef,
     isDrawing,
     overlay,
@@ -262,8 +244,12 @@ export function useSignPdf() {
     renderTypedSig,
     handleSigImageDrop,
     clearCanvas,
-    startOverlayDrag,
-    startOverlayResize,
+    beginOverlayDrag,
+    moveOverlayDrag,
+    endOverlayDrag,
+    beginOverlayResize,
+    moveOverlayResize,
+    endOverlayResize,
     handleReset,
     MAX_SIG_MB,
   };

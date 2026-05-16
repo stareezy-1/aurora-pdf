@@ -8,6 +8,7 @@ export interface OcrLanguageOption {
 }
 
 const SUPPORTED_LANGUAGES: OcrLanguageOption[] = [
+  { code: "ind", label: "Indonesian" },
   { code: "eng", label: "English" },
   { code: "fra", label: "French" },
   { code: "deu", label: "German" },
@@ -20,7 +21,6 @@ const SUPPORTED_LANGUAGES: OcrLanguageOption[] = [
   { code: "jpn", label: "Japanese" },
   { code: "ara", label: "Arabic" },
   { code: "kor", label: "Korean" },
-  { code: "ind", label: "Indonesian" },
 ];
 
 /**
@@ -136,4 +136,38 @@ export async function recognizeAll(
 
 export function getSupportedLanguages(): OcrLanguageOption[] {
   return SUPPORTED_LANGUAGES;
+}
+
+/**
+ * Recognize text in an image and return word-level bounding boxes.
+ * Each entry contains the word text and its pixel coordinates on the image.
+ * Words with empty or whitespace-only text are filtered out.
+ */
+export async function recognizeWithBoundingBoxes(
+  image: HTMLCanvasElement | Blob,
+  language: OcrLanguage,
+): Promise<
+  Array<{
+    text: string;
+    bbox: { x0: number; y0: number; x1: number; y1: number };
+  }>
+> {
+  const worker = await createWorker(language, OEM.LSTM_ONLY);
+  await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
+  try {
+    const { data } = await worker.recognize(image);
+    return data.words
+      .filter((word) => word.text.trim().length > 0)
+      .map((word) => ({
+        text: word.text,
+        bbox: {
+          x0: word.bbox.x0,
+          y0: word.bbox.y0,
+          x1: word.bbox.x1,
+          y1: word.bbox.y1,
+        },
+      }));
+  } finally {
+    await worker.terminate();
+  }
 }

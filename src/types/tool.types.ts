@@ -3,6 +3,8 @@ export type OcrLanguage = string; // Tesseract.js language code
 export type WatermarkPlacement = "diagonal" | "header" | "footer";
 export type SignatureMethod = "draw" | "type" | "upload";
 export type DpiOption = 150 | 300;
+export type PageSize = "A4" | "Letter" | "Legal";
+export type Orientation = "portrait" | "landscape";
 
 export interface WatermarkConfig {
   text: string; // 1–100 chars
@@ -11,12 +13,15 @@ export interface WatermarkConfig {
   color: string; // hex color string
   rotation: number; // 0–360 degrees
   placement: WatermarkPlacement;
+  fontFamily: string; // font family name
 }
 
 export interface SignatureConfig {
   method: SignatureMethod;
   dataUrl: string | null; // canvas data URL or uploaded image data URL
   typedName: string | null;
+  fontFamily: string | null; // font family for typed signature
+  fontSize: number | null; // font size (pt) for typed signature
   pageIndex: number; // 0-based
   x: number; // position on page (0–1 normalized)
   y: number;
@@ -28,6 +33,22 @@ export interface EditAction {
   type: "add-text" | "delete-page" | "reorder-pages";
   payload: unknown;
   timestamp: number;
+}
+
+export type PageNumberPosition =
+  | "bottom-center"
+  | "bottom-left"
+  | "bottom-right"
+  | "top-center";
+
+export type PageNumberFormat = "1" | "Page 1" | "1/N";
+
+export interface PageNumberConfig {
+  position: PageNumberPosition;
+  format: PageNumberFormat;
+  fontFamily: string;
+  fontSize: number; // 8–144
+  color: string; // hex color string
 }
 
 export interface ToolConfig {
@@ -53,11 +74,14 @@ export const defaultToolConfig: ToolConfig = {
     color: "#000000",
     rotation: 45,
     placement: "diagonal",
+    fontFamily: "Helvetica",
   },
   signature: {
     method: "draw",
     dataUrl: null,
     typedName: null,
+    fontFamily: "Georgia",
+    fontSize: 38,
     pageIndex: 0,
     x: 0.1,
     y: 0.8,

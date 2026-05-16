@@ -31,7 +31,7 @@ export function usePdfToExcel() {
         throw new NoTablesError();
       }
       return {
-        blob: new Blob([xlsxBytes], {
+        blob: new Blob([xlsxBytes as any], {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }),
         filename: buildOutputFilename(file.name, "pdf-to-excel"),

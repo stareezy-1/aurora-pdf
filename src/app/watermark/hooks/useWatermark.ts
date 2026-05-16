@@ -9,6 +9,22 @@ import {
 import { buildOutputFilename } from "@/lib/filename-utils";
 import type { WatermarkConfig } from "@/types/tool.types";
 
+function hexToRgb(hex: string) {
+  const clean = hex.replace("#", "");
+  const full =
+    clean.length === 3
+      ? clean
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : clean;
+  return {
+    r: parseInt(full.slice(0, 2), 16) / 255,
+    g: parseInt(full.slice(2, 4), 16) / 255,
+    b: parseInt(full.slice(4, 6), 16) / 255,
+  };
+}
+
 const DEFAULT_CONFIG: WatermarkConfig = {
   text: "CONFIDENTIAL",
   fontSize: 48,
@@ -16,6 +32,7 @@ const DEFAULT_CONFIG: WatermarkConfig = {
   color: "#888888",
   rotation: 45,
   placement: "diagonal",
+  fontFamily: "Helvetica",
 };
 
 export function useWatermark() {
@@ -37,12 +54,20 @@ export function useWatermark() {
   const [config, setConfig] = useState<WatermarkConfig>(DEFAULT_CONFIG);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Overlay drag position — null means use placement-based positioning
+  // NOTE: drag-to-reposition is intentionally removed — the placement tabs
+  // (Diagonal / Header / Footer) map directly to the engine's PLACEMENT_COORDS
+  // and produce pixel-perfect results. A free-drag approach requires converting
+  // CSS pixels of a scaled preview to PDF points, which is unreliable across
+  // different screen sizes and zoom levels.
+
   const processor = useFileProcessor({
     process: async (file, onProgress) => {
       const bytes = new Uint8Array(await file.arrayBuffer());
+      // Always use placement-based applyWatermark — reliable and accurate
       const result = await applyWatermark(bytes, config, onProgress);
       return {
-        blob: new Blob([result], { type: "application/pdf" }),
+        blob: new Blob([new Uint8Array(result)], { type: "application/pdf" }),
         filename: buildOutputFilename(file.name, "watermark"),
       };
     },
@@ -96,6 +121,7 @@ export function useWatermark() {
       textShadow: "0 1px 2px rgba(0,0,0,0.15)",
       userSelect: "none",
     };
+
     if (config.placement === "diagonal") {
       return {
         ...base,

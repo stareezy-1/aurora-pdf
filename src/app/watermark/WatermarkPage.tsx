@@ -41,7 +41,7 @@ export default function WatermarkPage() {
             status={vm.status}
             outputFilename={vm.outputFilename ?? undefined}
             blobUrl={vm.resultBlobUrl}
-            onDownload={vm.clearWorkbox}
+            onDownload={vm.handleReset}
             onReset={vm.handleReset}
           />
         )}
@@ -80,6 +80,38 @@ export default function WatermarkPage() {
                 maxLength={100}
                 aria-label="Watermark text"
               />
+            </div>
+
+            <div>
+              <label className="label" htmlFor="wm-font-family">
+                Font family
+              </label>
+              <select
+                id="wm-font-family"
+                className="input-field"
+                value={vm.config.fontFamily}
+                onChange={(e) => vm.update({ fontFamily: e.target.value })}
+                aria-label="Font family"
+              >
+                {[
+                  "Helvetica",
+                  "Times New Roman",
+                  "Courier",
+                  "Georgia",
+                  "Verdana",
+                  "Arial",
+                  "Trebuchet MS",
+                  "Palatino",
+                  "Garamond",
+                  "Bookman",
+                  "Comic Sans MS",
+                  "Impact",
+                ].map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -177,15 +209,17 @@ export default function WatermarkPage() {
                   (p) => (
                     <button
                       key={p}
-                      className={`tab-btn${vm.config.placement === p ? " active" : ""}`}
+                      className={`tab-btn${
+                        vm.config.placement === p ? " active" : ""
+                      }`}
                       onClick={() => vm.update({ placement: p })}
                       aria-pressed={vm.config.placement === p}
                     >
                       {p === "diagonal"
                         ? "↗ Diagonal"
                         : p === "header"
-                          ? "⬆ Header"
-                          : "⬇ Footer"}
+                        ? "⬆ Header"
+                        : "⬇ Footer"}
                     </button>
                   ),
                 )}

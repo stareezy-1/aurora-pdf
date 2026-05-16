@@ -86,9 +86,14 @@ export default defineConfig({
   ],
   resolve: {
     alias: { "@": resolve(__dirname, "src") },
+    // Force a single React instance — prevents "Cannot read properties of null"
+    // when @stareezy-ui/tokens (which imports React) is resolved separately.
+    dedupe: ["react", "react-dom"],
   },
   optimizeDeps: {
     exclude: ["pdfjs-dist"],
+    // Include the tokens package so Vite pre-bundles it with the same React
+    include: ["@stareezy-ui/tokens"],
   },
   worker: {
     format: "es",
@@ -104,6 +109,7 @@ export default defineConfig({
           mammoth: ["mammoth"],
           docx: ["docx"],
           jszip: ["jszip"],
+          html2canvas: ["html2canvas"],
         },
       },
     },

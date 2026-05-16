@@ -4,14 +4,103 @@ import { ProgressPanel } from "@/components/ProgressPanel/ProgressPanel";
 import { PrivacyShield } from "@/components/PrivacyShield/PrivacyShield";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useAuroraStore } from "@/stores/aurora.store";
+import { useDragOverlay } from "@/hooks/useDragOverlay";
 import { useSignPdf } from "./hooks/useSignPdf";
 import type { SignatureMethod } from "@/types/tool.types";
+import type { SigOverlay } from "./hooks/useSignPdf";
 
 const PDF_ACCEPT = [{ mime: "application/pdf", extension: ".pdf" }];
 const SIG_IMG_ACCEPT = [
   { mime: "image/png", extension: ".png" },
   { mime: "image/jpeg", extension: ".jpg" },
 ];
+
+// ── SignatureOverlay sub-component ───────────────────────────────────────────
+// Hooks (useDragOverlay) must be called at component level, not inside render.
+interface SignatureOverlayProps {
+  overlay: SigOverlay;
+  sigDataUrl: string;
+  beginOverlayDrag: (e: React.MouseEvent | React.TouchEvent) => void;
+  moveOverlayDrag: (delta: { dx: number; dy: number }) => void;
+  endOverlayDrag: () => void;
+  beginOverlayResize: (e: React.MouseEvent | React.TouchEvent) => void;
+  moveOverlayResize: (delta: { dx: number; dy: number }) => void;
+  endOverlayResize: () => void;
+}
+
+function SignatureOverlay({
+  overlay,
+  sigDataUrl,
+  beginOverlayDrag,
+  moveOverlayDrag,
+  endOverlayDrag,
+  beginOverlayResize,
+  moveOverlayResize,
+  endOverlayResize,
+}: SignatureOverlayProps) {
+  const dragHandlers = useDragOverlay({
+    onDrag: moveOverlayDrag,
+    onDragEnd: endOverlayDrag,
+  });
+
+  const resizeHandlers = useDragOverlay({
+    onDrag: moveOverlayResize,
+    onDragEnd: endOverlayResize,
+  });
+
+  function handleDragMouseDown(e: React.MouseEvent) {
+    beginOverlayDrag(e);
+    dragHandlers.onMouseDown(e);
+  }
+
+  function handleDragTouchStart(e: React.TouchEvent) {
+    beginOverlayDrag(e);
+    dragHandlers.onTouchStart(e);
+  }
+
+  function handleResizeMouseDown(e: React.MouseEvent) {
+    e.stopPropagation();
+    beginOverlayResize(e);
+    resizeHandlers.onMouseDown(e);
+  }
+
+  function handleResizeTouchStart(e: React.TouchEvent) {
+    e.stopPropagation();
+    beginOverlayResize(e);
+    resizeHandlers.onTouchStart(e);
+  }
+
+  return (
+    <div
+      className="editor-overlay-item selected"
+      style={{
+        left: overlay.x,
+        top: overlay.y,
+        width: overlay.width,
+        height: overlay.height,
+      }}
+      onMouseDown={handleDragMouseDown}
+      onTouchStart={handleDragTouchStart}
+    >
+      <img
+        src={sigDataUrl}
+        alt="Signature overlay"
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+          pointerEvents: "none",
+        }}
+        draggable={false}
+      />
+      <div
+        className="resize-handle"
+        onMouseDown={handleResizeMouseDown}
+        onTouchStart={handleResizeTouchStart}
+      />
+    </div>
+  );
+}
 
 export default function SignPdfPage() {
   usePageTitle("Sign PDF");
@@ -45,7 +134,7 @@ export default function SignPdfPage() {
             status={vm.status}
             outputFilename={vm.outputFilename ?? undefined}
             blobUrl={vm.resultBlobUrl}
-            onDownload={vm.clearWorkbox}
+            onDownload={vm.handleReset}
             onReset={vm.handleReset}
           />
         )}
@@ -143,13 +232,68 @@ export default function SignPdfPage() {
                   style={{ display: "none" }}
                   aria-hidden="true"
                 />
+                <div>
+                  <label className="label" htmlFor="sig-font-family">
+                    Font family
+                  </label>
+                  <select
+                    id="sig-font-family"
+                    className="select-field"
+                    value={vm.typedSigFont}
+                    onChange={(e) => {
+                      vm.setTypedSigFont(e.target.value);
+                      if (vm.typedName) setTimeout(vm.renderTypedSig, 0);
+                    }}
+                    aria-label="Signature font family"
+                  >
+                    {[
+                      "Helvetica",
+                      "Times New Roman",
+                      "Courier",
+                      "Georgia",
+                      "Verdana",
+                      "Arial",
+                      "Trebuchet MS",
+                      "Palatino",
+                      "Garamond",
+                      "Bookman",
+                      "Comic Sans MS",
+                      "Impact",
+                    ].map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="sig-font-size">
+                    Font size: {vm.typedSigSize}pt
+                  </label>
+                  <input
+                    id="sig-font-size"
+                    type="range"
+                    className="slider-field"
+                    min={8}
+                    max={144}
+                    value={vm.typedSigSize}
+                    onChange={(e) => {
+                      vm.setTypedSigSize(Number(e.target.value));
+                      if (vm.typedName) setTimeout(vm.renderTypedSig, 0);
+                    }}
+                    aria-label="Signature font size"
+                  />
+                </div>
                 <input
                   className="input-field"
                   value={vm.typedName}
                   onChange={(e) => vm.setTypedName(e.target.value)}
                   placeholder="Type your name…"
                   aria-label="Type your name"
-                  style={{ fontFamily: "Georgia, serif", fontSize: 20 }}
+                  style={{
+                    fontFamily: `${vm.typedSigFont}, serif`,
+                    fontSize: 20,
+                  }}
                 />
                 <button
                   className="btn btn-secondary btn-sm"
@@ -251,32 +395,16 @@ export default function SignPdfPage() {
                 draggable={false}
               />
               {vm.sigDataUrl && (
-                <div
-                  className="editor-overlay-item selected"
-                  style={{
-                    left: vm.overlay.x,
-                    top: vm.overlay.y,
-                    width: vm.overlay.width,
-                    height: vm.overlay.height,
-                  }}
-                  onMouseDown={vm.startOverlayDrag}
-                >
-                  <img
-                    src={vm.sigDataUrl}
-                    alt="Signature overlay"
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      pointerEvents: "none",
-                    }}
-                    draggable={false}
-                  />
-                  <div
-                    className="resize-handle"
-                    onMouseDown={vm.startOverlayResize}
-                  />
-                </div>
+                <SignatureOverlay
+                  overlay={vm.overlay}
+                  sigDataUrl={vm.sigDataUrl}
+                  beginOverlayDrag={vm.beginOverlayDrag}
+                  moveOverlayDrag={vm.moveOverlayDrag}
+                  endOverlayDrag={vm.endOverlayDrag}
+                  beginOverlayResize={vm.beginOverlayResize}
+                  moveOverlayResize={vm.moveOverlayResize}
+                  endOverlayResize={vm.endOverlayResize}
+                />
               )}
             </div>
           ) : (
