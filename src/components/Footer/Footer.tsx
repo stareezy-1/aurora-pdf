@@ -1,3 +1,5 @@
+import { config } from "@/lib/config";
+
 const YEAR = new Date().getFullYear();
 
 const TOOL_COLS = [
@@ -109,7 +111,7 @@ export function Footer() {
           </div>
           {/* Portfolio link */}
           <a
-            href="https://stareezy-portofolio.vercel.app/"
+            href={config.portfolioAppUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -144,7 +146,7 @@ export function Footer() {
           </a>
           {/* stareezy-ui badge */}
           <a
-            href="https://stareezy-ui.vercel.app/"
+            href={config.uiAppUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -256,7 +258,7 @@ export function Footer() {
           <span style={{ color: "var(--red)", fontSize: 15 }}>♥</span>
           <span>by</span>
           <a
-            href="https://stareezy-portofolio.vercel.app/"
+            href={config.portfolioAppUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -271,7 +273,7 @@ export function Footer() {
           <span style={{ color: "var(--border-2)", margin: "0 4px" }}>·</span>
           <span>UI by</span>
           <a
-            href="https://stareezy-ui.vercel.app/"
+            href={config.uiAppUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{
