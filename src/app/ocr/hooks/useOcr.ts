@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useFileProcessor } from "@/hooks/useFileProcessor";
 import { useAuroraStore } from "@/stores/aurora.store";
 import { recognizeAll, getSupportedLanguages } from "@/engines/ocr-engine";
-import { assembleTextPdf } from "@/engines/pdf-engine";
+import { assembleTextPdf, renderPagePreview } from "@/engines/pdf-engine";
 
 export function useOcr() {
   const {
@@ -19,6 +19,9 @@ export function useOcr() {
   const [files, setFiles] = useState<File[]>([]);
   const [blankPages, setBlankPages] = useState<string[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [extractedText, setExtractedText] = useState<string>("");
+  const [pdfPreviews, setPdfPreviews] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
   const languages = getSupportedLanguages();
 
   const processor = useFileProcessor({
@@ -28,7 +31,28 @@ export function useOcr() {
         .filter((r) => !r.text.trim())
         .map((r) => files[r.imageIndex]?.name ?? `Image ${r.imageIndex + 1}`);
       setBlankPages(blanks);
+
+      // Capture all extracted text for the preview panel
+      const allText = results
+        .sort((a, b) => a.imageIndex - b.imageIndex)
+        .map((r, i) => `--- Page ${i + 1} ---\n${r.text.trim()}`)
+        .join("\n\n");
+      setExtractedText(allText);
+
       const pdfBytes = await assembleTextPdf(results);
+
+      // Render PDF pages for preview (up to 5 pages)
+      const pageCount = Math.min(results.length, 5);
+      const previews: string[] = [];
+      for (let i = 0; i < pageCount; i++) {
+        try {
+          previews.push(await renderPagePreview(pdfBytes, i));
+        } catch {
+          /* skip failed renders */
+        }
+      }
+      setPdfPreviews(previews);
+
       return {
         blob: new Blob([pdfBytes], { type: "application/pdf" }),
         filename: "ocr-output.pdf",
@@ -38,9 +62,11 @@ export function useOcr() {
 
   function handleFilesAccepted(newFiles: File[]) {
     setFiles(newFiles);
-    // Generate object URL previews for each image
     const previews = newFiles.map((f) => URL.createObjectURL(f));
     setImagePreviews(previews);
+    // Reset previous results
+    setExtractedText("");
+    setPdfPreviews([]);
   }
 
   function handleRun() {
@@ -49,12 +75,25 @@ export function useOcr() {
   }
 
   function handleReset() {
-    // Revoke preview URLs to free memory
     imagePreviews.forEach((url) => URL.revokeObjectURL(url));
     clearWorkbox();
     setFiles([]);
     setImagePreviews([]);
     setBlankPages([]);
+    setExtractedText("");
+    setPdfPreviews([]);
+    setCopied(false);
+  }
+
+  async function handleCopyText() {
+    if (!extractedText) return;
+    try {
+      await navigator.clipboard.writeText(extractedText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Fallback: select the textarea
+    }
   }
 
   return {
@@ -71,10 +110,14 @@ export function useOcr() {
     setFiles,
     imagePreviews,
     blankPages,
+    extractedText,
+    pdfPreviews,
+    copied,
     languages,
     processor,
     handleFilesAccepted,
     handleRun,
     handleReset,
+    handleCopyText,
   };
 }
