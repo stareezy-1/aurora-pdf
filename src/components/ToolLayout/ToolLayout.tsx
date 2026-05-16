@@ -52,7 +52,8 @@ export function ToolLayout({
             </div>
           }
         >
-          {children}
+          {/* On desktop: fixed height with internal scroll. On mobile: natural height, page scrolls */}
+          <div style={{ flex: 1, overflowX: "hidden" }}>{children}</div>
         </Suspense>
       ) : (
         <main className="page-main" style={{ flex: 1 }}>

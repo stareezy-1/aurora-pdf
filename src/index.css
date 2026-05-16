@@ -495,7 +495,7 @@ a {
   background: #fff;
   box-shadow: var(--shadow-lg);
   border-radius: 4px;
-  overflow: hidden;
+  overflow: visible; /* allow overlays to extend beyond image bounds */
   cursor: crosshair;
 }
 .editor-page-wrap img {
@@ -522,6 +522,41 @@ a {
   background: var(--green);
   border-radius: 2px;
   cursor: se-resize;
+}
+
+/* Mobile editor — stack vertically, full scroll */
+@media (max-width: 768px) {
+  .editor-shell {
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+    min-height: calc(100vh - 56px);
+  }
+  .editor-sidebar {
+    width: 100%;
+    min-width: unset;
+    max-width: unset;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-y: visible;
+    flex-shrink: unset;
+  }
+  .editor-sidebar-body {
+    /* Don't grow to fill — let content determine height */
+    flex: unset;
+  }
+  .editor-canvas {
+    overflow: visible;
+    padding: 16px 12px 32px;
+    align-items: stretch;
+  }
+  .editor-canvas-toolbar {
+    max-width: 100%;
+  }
+  .editor-page-wrap img {
+    width: 100%;
+    height: auto;
+  }
 }
 
 /* Tool header */

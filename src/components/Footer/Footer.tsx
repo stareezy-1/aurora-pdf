@@ -160,6 +160,7 @@ export function Footer() {
               fontSize: 12,
               fontWeight: 600,
               marginTop: 4,
+              marginLeft: 16,
               transition: "all 0.2s",
             }}
             onMouseEnter={(e) => {
