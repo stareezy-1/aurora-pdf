@@ -9,22 +9,6 @@ import {
 import { buildOutputFilename } from "@/lib/filename-utils";
 import type { WatermarkConfig } from "@/types/tool.types";
 
-function hexToRgb(hex: string) {
-  const clean = hex.replace("#", "");
-  const full =
-    clean.length === 3
-      ? clean
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : clean;
-  return {
-    r: parseInt(full.slice(0, 2), 16) / 255,
-    g: parseInt(full.slice(2, 4), 16) / 255,
-    b: parseInt(full.slice(4, 6), 16) / 255,
-  };
-}
-
 const DEFAULT_CONFIG: WatermarkConfig = {
   text: "CONFIDENTIAL",
   fontSize: 48,
