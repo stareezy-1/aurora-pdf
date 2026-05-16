@@ -537,21 +537,55 @@ a {
     min-width: unset;
     max-width: unset;
     border-right: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: none;
     overflow-y: visible;
     flex-shrink: unset;
+    /* On mobile, sidebar renders as a column but we interleave canvas between sections */
+    display: contents; /* dissolve sidebar into the flow so children can be ordered */
+  }
+  .editor-sidebar-header {
+    order: 1;
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
   }
   .editor-sidebar-body {
-    /* Don't grow to fill — let content determine height */
+    order: 2;
     flex: unset;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
   }
+  /* Canvas sits between tool controls and page list */
   .editor-canvas {
+    order: 3;
     overflow: visible;
-    padding: 16px 12px 32px;
+    padding: 16px 12px;
     align-items: stretch;
+    background: var(--bg);
+  }
+  .editor-sidebar-pages {
+    order: 4;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .editor-sidebar-footer {
+    order: 5;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  /* Make the shell itself a flex column so order works */
+  .editor-shell {
+    display: flex !important;
+    flex-direction: column !important;
   }
   .editor-canvas-toolbar {
     max-width: 100%;
+  }
+  .editor-page-wrap {
+    width: 100%;
   }
   .editor-page-wrap img {
     width: 100%;

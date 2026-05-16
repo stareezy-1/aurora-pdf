@@ -485,7 +485,7 @@ export default function EditPdfPage() {
               })()}
 
             {/* ── Page thumbnails ── */}
-            <div>
+            <div className="editor-sidebar-pages">
               <div className="label" style={{ marginBottom: 8 }}>
                 Pages ({vm.thumbnails.length}) — drag to reorder
               </div>
