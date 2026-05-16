@@ -7,6 +7,15 @@ import { router } from "./router";
 import { useAuroraStore } from "@/stores/aurora.store";
 import { ErrorBoundary } from "@/error/ErrorBoundary";
 
+// Register service worker (PWA)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // SW registration failed — app still works without it
+    });
+  });
+}
+
 // Configure pdfjs worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",

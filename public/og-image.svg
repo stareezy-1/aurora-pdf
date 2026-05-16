@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050505"/>
+      <stop offset="100%" stop-color="#0f0f1a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ff88"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ff88"/>
+      <stop offset="60%" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle grid pattern -->
+  <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+    <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#1a1a2e" stroke-width="1"/>
+  </pattern>
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Accent bar top -->
+  <rect x="0" y="0" width="1200" height="4" fill="url(#accent)"/>
+
+  <!-- Logo area -->
+  <text x="80" y="120" font-size="72" font-weight="900" font-family="system-ui,sans-serif" fill="url(#title)">Aurora</text>
+  <text x="80" y="120" font-size="72" font-weight="900" font-family="system-ui,sans-serif" fill="#ffffff" dx="370">PDF</text>
+
+  <!-- Tagline -->
+  <text x="80" y="170" font-size="26" font-family="system-ui,sans-serif" fill="#a0a0b8">Zero-Server · Total Privacy · 100% Local Processing</text>
+
+  <!-- Privacy badge -->
+  <rect x="80" y="200" width="320" height="44" rx="22" fill="rgba(0,255,136,0.1)" stroke="rgba(0,255,136,0.3)" stroke-width="1"/>
+  <text x="100" y="228" font-size="18" font-family="system-ui,sans-serif" fill="#00ff88">🛡  No uploads · No accounts · Free forever</text>
+
+  <!-- Tool pills -->
+  <g transform="translate(80, 290)">
+    <!-- Row 1 -->
+    <rect x="0"   y="0" width="160" height="40" rx="8" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="1"/>
+    <text x="80"  y="26" font-size="15" text-anchor="middle" font-family="system-ui,sans-serif" fill="#f0f0f8">🗜️ Compress PDF</text>
+
+    <rect x="172" y="0" width="160" height="40" rx="8" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="1"/>
+    <text x="252" y="26" font-size="15" text-anchor="middle" font-family="system-ui,sans-serif" fill="#f0f0f8">🔍 OCR to PDF</text>
+
+    <rect x="344" y="0" width="160" height="40" rx="8" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="1"/>
+    <text x="424" y="26" font-size="15" text-anchor="middle" font-family="system-ui,sans-serif" fill="#f0f0f8">🖼️ PDF to JPG</text>
+
+    <rect x="516" y="0" width="160" height="40" rx="8" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="1"/>
+    <text x="596" y="26" font-size="15" text-anchor="middle" font-family="system-ui,sans-serif" fill="#f0f0f8">📝 PDF to Word</text>
+
+    <rect x="688" y="0" width="160" height="40" rx="8" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="1"/>
+    <text x="768" y="26" font-size="15" text-anchor="middle" font-family="system-ui,sans-serif" fill="#f0f0f8">📄 Word to PDF</text>
+
+    <!-- Row 2 -->
+    <rect x="0"   y="52" width="160" height="40" rx="8" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="1"/>
+    <text x="80"  y="78" font-size="15" text-anchor="middle" font-family="system-ui,sans-serif" fill="#f0f0f8">📊 PDF to Excel</text>
+
+    <rect x="172" y="52" width="160" height="40" rx="8" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="1"/>
+    <text x="252" y="78" font-size="15" text-anchor="middle" font-family="system-ui,sans-serif" fill="#f0f0f8">📋 Excel to PDF</text>
+
+    <rect x="344" y="52" width="160" height="40" rx="8" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="1"/>
+    <text x="424" y="78" font-size="15" text-anchor="middle" font-family="system-ui,sans-serif" fill="#f0f0f8">✏️ Edit PDF</text>
+
+    <rect x="516" y="52" width="160" height="40" rx="8" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="1"/>
+    <text x="596" y="78" font-size="15" text-anchor="middle" font-family="system-ui,sans-serif" fill="#f0f0f8">✍️ Sign PDF</text>
+
+    <rect x="688" y="52" width="160" height="40" rx="8" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="1"/>
+    <text x="768" y="78" font-size="15" text-anchor="middle" font-family="system-ui,sans-serif" fill="#f0f0f8">✂️ Split PDF</text>
+  </g>
+
+  <!-- URL -->
+  <text x="80" y="560" font-size="20" font-family="system-ui,sans-serif" fill="#606078">aurora-pdf.vercel.app</text>
+
+  <!-- Right side decorative "A" -->
+  <text x="980" y="480" font-size="320" font-weight="900" font-family="system-ui,sans-serif" fill="url(#accent)" opacity="0.08">A</text>
+</svg>

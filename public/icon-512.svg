@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#050505"/>
+  <rect x="40" y="40" width="432" height="432" rx="72" fill="#0f0f1a"/>
+  <!-- PDF document shape -->
+  <rect x="120" y="80" width="200" height="260" rx="12" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="2"/>
+  <rect x="120" y="80" width="200" height="260" rx="12" fill="none" stroke="#2a2a3e" stroke-width="2"/>
+  <!-- Folded corner -->
+  <path d="M280 80 L320 120 L280 120 Z" fill="#0f0f1a"/>
+  <path d="M280 80 L320 120" stroke="#2a2a3e" stroke-width="2"/>
+  <!-- Text lines -->
+  <rect x="148" y="148" width="120" height="8" rx="4" fill="#3a3a52"/>
+  <rect x="148" y="168" width="144" height="8" rx="4" fill="#3a3a52"/>
+  <rect x="148" y="188" width="100" height="8" rx="4" fill="#3a3a52"/>
+  <rect x="148" y="208" width="130" height="8" rx="4" fill="#3a3a52"/>
+  <rect x="148" y="228" width="90" height="8" rx="4" fill="#3a3a52"/>
+  <!-- Aurora green accent bar -->
+  <rect x="148" y="268" width="144" height="4" rx="2" fill="#00ff88"/>
+  <!-- "A" letter with gradient -->
+  <text x="256" y="430" font-size="120" font-weight="900" text-anchor="middle" font-family="system-ui,sans-serif" fill="url(#grad)">A</text>
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00ff88"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+</svg>

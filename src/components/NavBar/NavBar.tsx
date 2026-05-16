@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router";
 import { useAuroraStore } from "@/stores/aurora.store";
+import { usePwaInstall } from "@/hooks/usePwaInstall";
+import { PwaInstallModal } from "@/components/PwaInstallModal/PwaInstallModal";
 import type { NavBarProps } from "./NavBar.types";
 
 const TOOL_LINKS = [
@@ -31,6 +33,7 @@ export function NavBar({ currentPath }: NavBarProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
   const sc = STATUS_CONFIG[status];
+  const pwa = usePwaInstall();
 
   // Close drawer on route change
   useEffect(() => {
@@ -140,6 +143,28 @@ export function NavBar({ currentPath }: NavBarProps) {
           <span className={`badge ${sc.cls}`}>
             {sc.icon} {sc.text}
           </span>
+          {pwa.state === "available" && (
+            <button
+              onClick={pwa.openModal}
+              aria-label="Install AuroraPDF app"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "5px 12px",
+                borderRadius: "var(--radius-sm)",
+                background: "rgba(0,255,136,0.1)",
+                border: "1px solid rgba(0,255,136,0.3)",
+                color: "var(--green)",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              ⬇ Install
+            </button>
+          )}
           <button
             onClick={toggleTheme}
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
@@ -253,6 +278,25 @@ export function NavBar({ currentPath }: NavBarProps) {
           >
             {sc.icon} {sc.text}
           </span>
+          {pwa.state === "available" && (
+            <button
+              onClick={() => {
+                setDrawerOpen(false);
+                pwa.openModal();
+              }}
+              aria-label="Install AuroraPDF app"
+              className="btn"
+              style={{
+                width: "100%",
+                background: "rgba(0,255,136,0.1)",
+                border: "1px solid rgba(0,255,136,0.3)",
+                color: "var(--green)",
+                fontWeight: 600,
+              }}
+            >
+              ⬇ Install AuroraPDF App
+            </button>
+          )}
           <button
             onClick={toggleTheme}
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
@@ -263,6 +307,15 @@ export function NavBar({ currentPath }: NavBarProps) {
           </button>
         </div>
       </div>
+
+      {/* PWA Install Modal */}
+      {pwa.showModal && (
+        <PwaInstallModal
+          state={pwa.state}
+          onInstall={pwa.install}
+          onDismiss={pwa.dismiss}
+        />
+      )}
     </>
   );
 }

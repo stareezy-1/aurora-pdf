@@ -2,9 +2,180 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AuroraPDF — Zero-Server PDF Tools</title>
+
+    <!-- ── Primary SEO ─────────────────────────────────────────────────── -->
+    <title>AuroraPDF — Free Online PDF Tools | No Upload Required</title>
+    <meta
+      name="description"
+      content="AuroraPDF offers 11 free, privacy-first PDF tools — compress, convert, edit, sign, watermark and split PDFs entirely in your browser. No file uploads, no accounts, 100% local processing."
+    />
+    <meta
+      name="keywords"
+      content="PDF tools, compress PDF, PDF to Word, Word to PDF, PDF to Excel, Excel to PDF, PDF to JPG, OCR PDF, edit PDF, sign PDF, watermark PDF, split PDF, free PDF tools, online PDF, no upload PDF, privacy PDF"
+    />
+    <meta name="author" content="Stareezy" />
+    <meta
+      name="robots"
+      content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+    />
+    <link rel="canonical" href="https://aurora-pdf.vercel.app/" />
+
+    <!-- ── Open Graph (Facebook, LinkedIn, WhatsApp) ───────────────────── -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://aurora-pdf.vercel.app/" />
+    <meta
+      property="og:title"
+      content="AuroraPDF — Free Online PDF Tools | No Upload Required"
+    />
+    <meta
+      property="og:description"
+      content="11 free PDF tools that run entirely in your browser. Compress, convert, edit, sign, watermark and split PDFs with zero uploads and total privacy."
+    />
+    <meta
+      property="og:image"
+      content="https://aurora-pdf.vercel.app/og-image.svg"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="AuroraPDF — Zero-Server PDF Tools" />
+    <meta property="og:site_name" content="AuroraPDF" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- ── Twitter Card ────────────────────────────────────────────────── -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="AuroraPDF — Free Online PDF Tools | No Upload Required"
+    />
+    <meta
+      name="twitter:description"
+      content="11 free PDF tools that run entirely in your browser. No uploads, no accounts, total privacy."
+    />
+    <meta
+      name="twitter:image"
+      content="https://aurora-pdf.vercel.app/og-image.svg"
+    />
+    <meta name="twitter:creator" content="@stareezy" />
+
+    <!-- ── PWA / App ───────────────────────────────────────────────────── -->
+    <meta name="theme-color" content="#050505" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="AuroraPDF" />
+    <meta name="application-name" content="AuroraPDF" />
+    <meta name="msapplication-TileColor" content="#050505" />
+
+    <!-- ── Icons ───────────────────────────────────────────────────────── -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- ── Preconnect / Performance ────────────────────────────────────── -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+
+    <!-- ── JSON-LD Structured Data ─────────────────────────────────────── -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "@id": "https://aurora-pdf.vercel.app/#app",
+            "name": "AuroraPDF",
+            "url": "https://aurora-pdf.vercel.app/",
+            "description": "Free, privacy-first PDF utility suite. All processing happens locally in your browser — no file uploads, no accounts required.",
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Requires JavaScript. Works in Chrome, Firefox, Safari, Edge.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "featureList": [
+              "Compress PDF",
+              "OCR Images to PDF",
+              "PDF to JPG",
+              "PDF to Word",
+              "Word to PDF",
+              "PDF to Excel",
+              "Excel to PDF",
+              "Edit PDF",
+              "Sign PDF",
+              "Add Watermark to PDF",
+              "Split PDF"
+            ],
+            "screenshot": "https://aurora-pdf.vercel.app/og-image.svg",
+            "creator": {
+              "@type": "Organization",
+              "name": "Stareezy",
+              "url": "https://stareezy-portofolio.vercel.app/"
+            }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://aurora-pdf.vercel.app/#website",
+            "url": "https://aurora-pdf.vercel.app/",
+            "name": "AuroraPDF",
+            "description": "Free online PDF tools with zero uploads",
+            "publisher": {
+              "@type": "Organization",
+              "name": "Stareezy",
+              "url": "https://stareezy-portofolio.vercel.app/"
+            },
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": "https://aurora-pdf.vercel.app/?q={search_term_string}",
+              "query-input": "required name=search_term_string"
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Are my files uploaded to a server?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. AuroraPDF processes all files entirely in your browser using WebAssembly. Your files never leave your device."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is AuroraPDF free to use?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes, AuroraPDF is completely free with no account required and no usage limits."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I use AuroraPDF offline?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. AuroraPDF is a Progressive Web App (PWA) that can be installed on your device and used offline after the first visit."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What PDF tools does AuroraPDF offer?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "AuroraPDF offers 11 tools: Compress PDF, OCR Images to PDF, PDF to JPG, PDF to Word, Word to PDF, PDF to Excel, Excel to PDF, Edit PDF, Sign PDF, Add Watermark, and Split PDF."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
