@@ -1,0 +1,40 @@
+{
+  "name": "aurora-pdf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "@stareezy-ui/tokens": "file:../stareezy-ui/packages/tokens",
+    "docx": "8.5.0",
+    "jszip": "3.10.1",
+    "mammoth": "1.8.0",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "4.4.168",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-router": "7.6.2",
+    "tesseract.js": "5.1.1",
+    "uuid": "9.0.1",
+    "xlsx": "0.18.5",
+    "zustand": "5.0.5"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^28.0.3",
+    "@types/react": "19.1.5",
+    "@types/react-dom": "19.1.5",
+    "@types/uuid": "9.0.8",
+    "@vitejs/plugin-react": "4.3.4",
+    "fast-check": "3.23.2",
+    "jsdom": "^29.1.1",
+    "typescript": "5.7.3",
+    "vite": "6.3.5",
+    "vitest": "3.2.4"
+  }
+}
