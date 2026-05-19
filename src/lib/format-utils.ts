@@ -68,4 +68,6 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
     "Reorder, rotate, duplicate, and delete PDF pages to reorganize documents.",
   "Protect PDF":
     "Encrypt your PDF with a password to restrict unauthorized access.",
+  "Searchable PDF OCR":
+    "Convert scanned or image-based PDFs into searchable, selectable documents using offline OCR.",
 };

@@ -1,18 +1,18 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- ── Primary SEO ─────────────────────────────────────────────────── -->
-    <title>AuroraPDF — Free Online PDF Tools | No Upload Required</title>
+    <title>AuroraPDF — 15 Free Online PDF Tools | No Upload Required</title>
     <meta
       name="description"
-      content="AuroraPDF offers 11 free, privacy-first PDF tools — compress, convert, edit, sign, watermark and split PDFs entirely in your browser. No file uploads, no accounts, 100% local processing."
+      content="AuroraPDF offers 15 free, privacy-first PDF tools — compress, convert, edit, sign, watermark, split, OCR and more. Everything runs 100% in your browser. No file uploads, no accounts, no limits."
     />
     <meta
       name="keywords"
-      content="PDF tools, compress PDF, PDF to Word, Word to PDF, PDF to Excel, Excel to PDF, PDF to JPG, OCR PDF, edit PDF, sign PDF, watermark PDF, split PDF, free PDF tools, online PDF, no upload PDF, privacy PDF"
+      content="PDF tools, compress PDF, PDF to Word, Word to PDF, PDF to Excel, Excel to PDF, PDF to JPG, OCR PDF, searchable PDF, edit PDF, sign PDF, watermark PDF, split PDF, organize PDF, protect PDF, HTML to PDF, free PDF tools, online PDF, no upload PDF, privacy PDF, browser PDF, offline PDF"
     />
     <meta name="author" content="Stareezy" />
     <meta
@@ -26,16 +26,17 @@
     <meta property="og:url" content="https://aurora.stareezy.tech/" />
     <meta
       property="og:title"
-      content="AuroraPDF — Free Online PDF Tools | No Upload Required"
+      content="AuroraPDF — 15 Free Online PDF Tools | No Upload Required"
     />
     <meta
       property="og:description"
-      content="11 free PDF tools that run entirely in your browser. Compress, convert, edit, sign, watermark and split PDFs with zero uploads and total privacy."
+      content="15 free PDF tools that run entirely in your browser. Compress, convert, edit, sign, watermark, split, OCR and more — zero uploads, total privacy."
     />
     <meta
       property="og:image"
-      content="https://aurora.stareezy.tech//og-image.svg"
+      content="https://aurora.stareezy.tech/og-image.svg"
     />
+    <meta property="og:image:type" content="image/svg+xml" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="AuroraPDF — Zero-Server PDF Tools" />
@@ -44,19 +45,20 @@
 
     <!-- ── Twitter Card ────────────────────────────────────────────────── -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@stareezy" />
+    <meta name="twitter:creator" content="@stareezy" />
     <meta
       name="twitter:title"
-      content="AuroraPDF — Free Online PDF Tools | No Upload Required"
+      content="AuroraPDF — 15 Free Online PDF Tools | No Upload Required"
     />
     <meta
       name="twitter:description"
-      content="11 free PDF tools that run entirely in your browser. No uploads, no accounts, total privacy."
+      content="15 free PDF tools that run entirely in your browser. No uploads, no accounts, total privacy."
     />
     <meta
       name="twitter:image"
       content="https://aurora.stareezy.tech/og-image.svg"
     />
-    <meta name="twitter:creator" content="@stareezy" />
 
     <!-- ── PWA / App ───────────────────────────────────────────────────── -->
     <meta name="theme-color" content="#050505" />
@@ -90,7 +92,7 @@
             "@id": "https://aurora.stareezy.tech/#app",
             "name": "AuroraPDF",
             "url": "https://aurora.stareezy.tech/",
-            "description": "Free, privacy-first PDF utility suite. All processing happens locally in your browser — no file uploads, no accounts required.",
+            "description": "Free, privacy-first PDF utility suite with 15 tools. All processing happens locally in your browser — no file uploads, no accounts required.",
             "applicationCategory": "UtilitiesApplication",
             "operatingSystem": "Any",
             "browserRequirements": "Requires JavaScript. Works in Chrome, Firefox, Safari, Edge.",
@@ -102,15 +104,19 @@
             "featureList": [
               "Compress PDF",
               "OCR Images to PDF",
+              "Searchable PDF OCR",
               "PDF to JPG",
               "PDF to Word",
               "Word to PDF",
               "PDF to Excel",
               "Excel to PDF",
+              "HTML to PDF",
               "Edit PDF",
               "Sign PDF",
               "Add Watermark to PDF",
-              "Split PDF"
+              "Split PDF",
+              "Organize PDF",
+              "Protect PDF"
             ],
             "screenshot": "https://aurora.stareezy.tech/og-image.svg",
             "creator": {
@@ -124,7 +130,7 @@
             "@id": "https://aurora.stareezy.tech/#website",
             "url": "https://aurora.stareezy.tech/",
             "name": "AuroraPDF",
-            "description": "Free online PDF tools with zero uploads",
+            "description": "15 free online PDF tools with zero uploads",
             "publisher": {
               "@type": "Organization",
               "name": "Stareezy",
@@ -135,6 +141,104 @@
               "target": "https://aurora.stareezy.tech/?q={search_term_string}",
               "query-input": "required name=search_term_string"
             }
+          },
+          {
+            "@type": "ItemList",
+            "name": "AuroraPDF Tools",
+            "description": "Complete list of free PDF tools available on AuroraPDF",
+            "numberOfItems": 15,
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Compress PDF",
+                "url": "https://aurora.stareezy.tech/compress"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "OCR: Images to PDF",
+                "url": "https://aurora.stareezy.tech/ocr"
+              },
+              {
+                "@type": "ListItem",
+                "position": 3,
+                "name": "Searchable PDF OCR",
+                "url": "https://aurora.stareezy.tech/searchable-pdf"
+              },
+              {
+                "@type": "ListItem",
+                "position": 4,
+                "name": "PDF to JPG",
+                "url": "https://aurora.stareezy.tech/pdf-to-jpg"
+              },
+              {
+                "@type": "ListItem",
+                "position": 5,
+                "name": "PDF to Word",
+                "url": "https://aurora.stareezy.tech/pdf-to-word"
+              },
+              {
+                "@type": "ListItem",
+                "position": 6,
+                "name": "Word to PDF",
+                "url": "https://aurora.stareezy.tech/word-to-pdf"
+              },
+              {
+                "@type": "ListItem",
+                "position": 7,
+                "name": "PDF to Excel",
+                "url": "https://aurora.stareezy.tech/pdf-to-excel"
+              },
+              {
+                "@type": "ListItem",
+                "position": 8,
+                "name": "Excel to PDF",
+                "url": "https://aurora.stareezy.tech/excel-to-pdf"
+              },
+              {
+                "@type": "ListItem",
+                "position": 9,
+                "name": "HTML to PDF",
+                "url": "https://aurora.stareezy.tech/html-to-pdf"
+              },
+              {
+                "@type": "ListItem",
+                "position": 10,
+                "name": "Edit PDF",
+                "url": "https://aurora.stareezy.tech/edit"
+              },
+              {
+                "@type": "ListItem",
+                "position": 11,
+                "name": "Sign PDF",
+                "url": "https://aurora.stareezy.tech/sign"
+              },
+              {
+                "@type": "ListItem",
+                "position": 12,
+                "name": "Add Watermark",
+                "url": "https://aurora.stareezy.tech/watermark"
+              },
+              {
+                "@type": "ListItem",
+                "position": 13,
+                "name": "Split PDF",
+                "url": "https://aurora.stareezy.tech/split"
+              },
+              {
+                "@type": "ListItem",
+                "position": 14,
+                "name": "Organize PDF",
+                "url": "https://aurora.stareezy.tech/organize"
+              },
+              {
+                "@type": "ListItem",
+                "position": 15,
+                "name": "Protect PDF",
+                "url": "https://aurora.stareezy.tech/protect"
+              }
+            ]
           },
           {
             "@type": "FAQPage",
@@ -168,7 +272,23 @@
                 "name": "What PDF tools does AuroraPDF offer?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "AuroraPDF offers 11 tools: Compress PDF, OCR Images to PDF, PDF to JPG, PDF to Word, Word to PDF, PDF to Excel, Excel to PDF, Edit PDF, Sign PDF, Add Watermark, and Split PDF."
+                  "text": "AuroraPDF offers 15 tools: Compress PDF, OCR Images to PDF, Searchable PDF OCR, PDF to JPG, PDF to Word, Word to PDF, PDF to Excel, Excel to PDF, HTML to PDF, Edit PDF, Sign PDF, Add Watermark, Split PDF, Organize PDF, and Protect PDF."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does AuroraPDF work on mobile?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. AuroraPDF is fully responsive and works on smartphones and tablets. It can also be installed as a PWA on iOS and Android for a native app-like experience."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How does the Searchable PDF OCR tool work?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The Searchable PDF OCR tool uses Tesseract.js to recognize text in scanned or image-based PDFs entirely in your browser. It embeds an invisible text layer so the output PDF is searchable, selectable, and copyable — without changing the visual appearance."
                 }
               }
             ]
