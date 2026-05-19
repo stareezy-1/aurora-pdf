@@ -5,7 +5,6 @@ import type {
   TextAnnotation,
   OcrPageResult,
   ShapeAnnotation,
-  OcrWord,
   SearchablePdfPage,
 } from "@/types/engine.types";
 import type {
