@@ -13,6 +13,7 @@ export default defineConfig({
         "icon-192.svg",
         "icon-512.svg",
         "robots.txt",
+        "google76720285c6e99e6d.html",
       ],
       manifest: {
         name: "AuroraPDF — Zero-Server PDF Tools",
