@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Link } from "react-router";
 import { DownloadButton } from "@/components/DownloadButton/DownloadButton";
 import type { PrivacyShieldProps } from "./PrivacyShield.types";
 
@@ -16,6 +18,7 @@ export function PrivacyShield({
   blobUrl,
   onDownload,
   onReset,
+  relatedTools,
 }: PrivacyShieldProps) {
   const sc = STATUS_CONFIG[status];
 
@@ -35,6 +38,9 @@ export function PrivacyShield({
       ? `${(outputSizeBytes / 1024).toFixed(1)} KB`
       : `${(outputSizeBytes / 1024 / 1024).toFixed(2)} MB`
     : null;
+
+  const showRelated =
+    status === "success" && relatedTools && relatedTools.length > 0;
 
   return (
     <div
@@ -111,6 +117,81 @@ export function PrivacyShield({
           </button>
         )}
       </div>
+
+      {/* "Try another tool" section */}
+      {showRelated && (
+        <div
+          style={{
+            marginTop: 28,
+            paddingTop: 20,
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          <p
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              marginBottom: 12,
+            }}
+          >
+            Try another tool
+          </p>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              justifyContent: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            {relatedTools!.slice(0, 3).map((tool) => (
+              <RelatedToolCard key={tool.path} tool={tool} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+interface RelatedToolCardProps {
+  tool: { path: string; label: string; icon: string };
+}
+
+function RelatedToolCard({ tool }: RelatedToolCardProps) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <Link
+      to={tool.path}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 6,
+        padding: "12px 16px",
+        borderRadius: "var(--radius-md)",
+        background: "var(--surface-2)",
+        border: "1px solid var(--border)",
+        textDecoration: "none",
+        color: "var(--text)",
+        fontSize: 13,
+        fontWeight: 500,
+        minWidth: 100,
+        transition:
+          "transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)",
+        transform: hovered ? "translateY(-2px)" : "translateY(0)",
+        boxShadow: hovered ? "var(--shadow-md)" : "none",
+        borderColor: hovered ? "var(--border-2)" : "var(--border)",
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <span style={{ fontSize: 22 }}>{tool.icon}</span>
+      <span style={{ textAlign: "center", lineHeight: 1.3 }}>{tool.label}</span>
+    </Link>
   );
 }

@@ -20,6 +20,7 @@ import type { TextAnnotation, ShapeAnnotation } from "@/types/engine.types";
 import type { PageNumberPosition, PageNumberFormat } from "@/types/tool.types";
 
 const MAX_SNAPSHOTS = 5; // Keep low to limit memory — each snapshot = full PDF copy
+const MAX_OVERLAY_UNDO = 20; // Max overlay-only undo steps
 
 export type Tool =
   | "select"
@@ -70,6 +71,11 @@ export function useEditPdf() {
     failSession,
     updateProgress,
     clearWorkbox,
+    undoStack,
+    redoStack,
+    pushUndo,
+    pushRedo,
+    clearUndoRedo,
   } = useAuroraStore();
 
   const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
@@ -85,6 +91,16 @@ export function useEditPdf() {
 
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // ── Overlay-only undo/redo stacks ─────────────────────────────────────────
+  // These ref stacks hold snapshots of the overlays array only (not the full
+  // PDF state). They are synced with the Zustand store's undoStack/redoStack
+  // so the toolbar buttons can be greyed out correctly.
+  // The actual overlay data lives in these refs; the store stacks hold
+  // placeholder entries so their .length reflects available undo/redo steps.
+  const overlayUndoRef = useRef<Overlay[][]>([]);
+  const overlayRedoRef = useRef<Overlay[][]>([]);
+
   const [activeTool, setActiveTool] = useState<Tool>("select");
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [dragSrc, setDragSrc] = useState<number | null>(null);
@@ -159,6 +175,34 @@ export function useEditPdf() {
   } | null>(null);
   const [ocrEditText, setOcrEditText] = useState("");
 
+  // ── Snap-to-grid (task 15.2) ──────────────────────────────────────────────
+  const [isDraggingOverlay, setIsDraggingOverlay] = useState(false);
+
+  // ── Multi-select (task 15.3) ───────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // ── Zoom (task 15.4) ──────────────────────────────────────────────────────
+  const [zoom, setZoom] = useState<0.5 | 0.75 | 1 | 1.25 | 1.5>(1);
+
+  // ── Sidebar resize (task 15.5) ────────────────────────────────────────────
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const stored = localStorage.getItem("aurora-sidebar-width");
+    const parsed = stored ? parseInt(stored, 10) : 300;
+    return Math.min(420, Math.max(220, isNaN(parsed) ? 300 : parsed));
+  });
+
+  // ── Context menu (task 15.7) ──────────────────────────────────────────────
+  const [contextMenuPos, setContextMenuPos] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // ── Thumbnail hover preview (task 15.8) ───────────────────────────────────
+  const [hoveredThumbIndex, setHoveredThumbIndex] = useState<number | null>(
+    null,
+  );
+  const thumbHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Overlay drag/resize — origin refs used by useDragOverlay callbacks
   const overlayDragOriginRef = useRef<{
     id: string;
@@ -196,6 +240,23 @@ export function useEditPdf() {
     });
   }
 
+  /**
+   * Push current overlays to the overlay undo stack before any overlay mutation.
+   * Clears the redo stack (a new mutation invalidates redo history).
+   * Syncs with the Zustand store so toolbar buttons reflect stack state.
+   */
+  function pushOverlayUndo(curOverlays: Overlay[]) {
+    const snapshot = curOverlays.map((o) => ({ ...o }));
+    overlayUndoRef.current = [...overlayUndoRef.current, snapshot].slice(
+      -MAX_OVERLAY_UNDO,
+    );
+    // Clear redo stack — new mutation invalidates redo history
+    overlayRedoRef.current = [];
+    // Sync store: rebuild undo stack with placeholder entries matching ref length
+    clearUndoRedo();
+    overlayUndoRef.current.forEach(() => pushUndo(true));
+  }
+
   // ── Cleanup on unmount — free all in-memory PDF data ──────────────────────
   useEffect(() => {
     return () => {
@@ -204,8 +265,63 @@ export function useEditPdf() {
       setPagePreviews([]);
       setSnapshots([]);
       setOverlays([]);
+      clearUndoRedo();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Overlay undo/redo — listen to global keyboard shortcut events ──────────
+  // useKeyboardShortcuts dispatches aurora:undo / aurora:redo after calling
+  // popUndo() / popRedo() on the store. We listen here to perform the actual
+  // overlay restore using our local ref stacks.
+  useEffect(() => {
+    const handleUndo = () => {
+      if (overlayUndoRef.current.length === 0) return;
+      const prev = overlayUndoRef.current[overlayUndoRef.current.length - 1];
+      // Push current overlays to redo stack
+      overlayRedoRef.current = [
+        ...overlayRedoRef.current,
+        overlays.map((o) => ({ ...o })),
+      ].slice(-MAX_OVERLAY_UNDO);
+      // Pop from undo stack
+      overlayUndoRef.current = overlayUndoRef.current.slice(0, -1);
+      // Restore overlays
+      setOverlays(prev);
+      setSelectedId(null);
+      // Sync store stacks
+      clearUndoRedo();
+      overlayUndoRef.current.forEach(() => pushUndo(true));
+      overlayRedoRef.current.forEach(() => pushRedo(true));
+    };
+
+    const handleRedo = () => {
+      if (overlayRedoRef.current.length === 0) return;
+      const next = overlayRedoRef.current[overlayRedoRef.current.length - 1];
+      // Push current overlays to undo stack
+      overlayUndoRef.current = [
+        ...overlayUndoRef.current,
+        overlays.map((o) => ({ ...o })),
+      ].slice(-MAX_OVERLAY_UNDO);
+      // Pop from redo stack
+      overlayRedoRef.current = overlayRedoRef.current.slice(0, -1);
+      // Restore overlays
+      setOverlays(next);
+      setSelectedId(null);
+      // Sync store stacks
+      clearUndoRedo();
+      overlayUndoRef.current.forEach(() => pushUndo(true));
+      overlayRedoRef.current.forEach(() => pushRedo(true));
+    };
+
+    window.addEventListener("aurora:undo", handleUndo);
+    window.addEventListener("aurora:redo", handleRedo);
+    return () => {
+      window.removeEventListener("aurora:undo", handleUndo);
+      window.removeEventListener("aurora:redo", handleRedo);
+    };
+    // overlays is a dependency so the closures capture the latest value
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlays]);
 
   // ── File load ──────────────────────────────────────────────────────────────
 
@@ -218,6 +334,10 @@ export function useEditPdf() {
     setOverlays([]);
     setSelectedId(null);
     setCurrentPage(0);
+    // Clear undo/redo when a new file is loaded
+    overlayUndoRef.current = [];
+    overlayRedoRef.current = [];
+    clearUndoRedo();
     startTransition(async () => {
       const n = await getPageCount(bytes);
       const thumbs: string[] = [];
@@ -231,13 +351,12 @@ export function useEditPdf() {
     });
   }
 
-  // ── Undo ───────────────────────────────────────────────────────────────────
+  // ── Undo (toolbar button — full PDF snapshot restore) ─────────────────────
 
   function handleUndo() {
     setSnapshots((prev) => {
       if (prev.length === 0) return prev;
       const snap = prev[prev.length - 1];
-      // Restore all state from snapshot
       setPdfBytes(snap.pdfBytes);
       setThumbnails(snap.thumbnails);
       setPagePreviews(snap.pagePreviews);
@@ -252,7 +371,6 @@ export function useEditPdf() {
 
   async function confirmDelete(idx: number) {
     if (!pdfBytes) return;
-    // Save snapshot BEFORE mutation
     saveSnapshot(pdfBytes, thumbnails, pagePreviews, overlays, currentPage);
 
     const newBytes = await deletePages(pdfBytes, [idx]);
@@ -275,7 +393,6 @@ export function useEditPdf() {
 
   async function handleThumbDrop(targetIdx: number) {
     if (dragSrc === null || dragSrc === targetIdx || !pdfBytes) return;
-    // Save snapshot BEFORE mutation
     saveSnapshot(pdfBytes, thumbnails, pagePreviews, overlays, currentPage);
 
     const order = thumbnails.map((_, i) => i);
@@ -294,27 +411,25 @@ export function useEditPdf() {
   function handleCanvasClick(e: React.MouseEvent<HTMLDivElement>) {
     if (activeTool === "select") {
       setSelectedId(null);
+      setSelectedIds(new Set());
       return;
     }
-    // Draw tool: canvas handles its own events — ignore clicks here
     if (activeTool === "draw") return;
-    // OCR Edit tool: word bbox divs handle their own clicks — ignore here
     if (activeTool === "ocr-edit") return;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Account for zoom: the canvas is scaled, so we need to divide by zoom
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
     const id = `${Date.now()}`;
 
-    // Shape tool: place a pending shape overlay
     if (activeTool === "shape") {
       setPendingShape({ x: x - 60, y: y - 40, width: 120, height: 80 });
       return;
     }
 
-    // Save snapshot before adding overlay
-    if (pdfBytes)
-      saveSnapshot(pdfBytes, thumbnails, pagePreviews, overlays, currentPage);
+    // Push overlay undo snapshot before adding a new overlay
+    pushOverlayUndo(overlays);
 
     if (activeTool === "text") {
       setOverlays((prev) => [
@@ -365,8 +480,6 @@ export function useEditPdf() {
       ]);
       setSelectedId(id);
     } else if (activeTool === "watermark") {
-      // Apply watermark immediately using the same engine function as the
-      // standalone Watermark page — this guarantees preview matches export.
       if (!pdfBytes) return;
       saveSnapshot(pdfBytes, thumbnails, pagePreviews, overlays, currentPage);
       applyWatermark(
@@ -406,34 +519,88 @@ export function useEditPdf() {
 
   // ── Overlay drag/resize — called by OverlayItem via useDragOverlay ─────────
 
-  /** Called when a drag gesture starts on an overlay — records origin position */
+  /** Snap a coordinate to the nearest 10px grid line when within 5px */
+  function snapToGrid(v: number): number {
+    return Math.abs(v % 10) < 5 ? Math.round(v / 10) * 10 : v;
+  }
+
+  // Multi-select drag: store origins for all selected overlays
+  const multiDragOriginsRef = useRef<
+    Map<string, { origX: number; origY: number }>
+  >(new Map());
+
   const beginOverlayDrag = useCallback(
-    (id: string) => {
+    (id: string, shiftKey?: boolean) => {
       const ov = overlays.find((o) => o.id === id);
       if (!ov) return;
       overlayDragOriginRef.current = { id, origX: ov.x, origY: ov.y };
+      setIsDraggingOverlay(true);
+
+      // Multi-select: shift+click toggles membership
+      if (shiftKey) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(id)) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
+          return next;
+        });
+        // Don't change single selectedId when shift-clicking
+        return;
+      }
+
+      // Normal click: if item is already in multi-select set, keep set; otherwise reset to single
+      setSelectedIds((prev) => {
+        if (prev.has(id)) return prev;
+        return new Set([id]);
+      });
       setSelectedId(id);
+
+      // Store origins for all currently selected overlays for multi-drag
+      const currentSelected = selectedIds.has(id) ? selectedIds : new Set([id]);
+      const origins = new Map<string, { origX: number; origY: number }>();
+      overlays.forEach((o) => {
+        if (currentSelected.has(o.id)) {
+          origins.set(o.id, { origX: o.x, origY: o.y });
+        }
+      });
+      multiDragOriginsRef.current = origins;
     },
-    [overlays],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [overlays, selectedIds],
   );
 
-  /** Called on every drag move delta — updates overlay position */
   const moveOverlayDrag = useCallback((id: string, dx: number, dy: number) => {
     const origin = overlayDragOriginRef.current;
     if (!origin || origin.id !== id) return;
+
     setOverlays((prev) =>
-      prev.map((o) =>
-        o.id === id ? { ...o, x: origin.origX + dx, y: origin.origY + dy } : o,
-      ),
+      prev.map((o) => {
+        const multiOrigin = multiDragOriginsRef.current.get(o.id);
+        if (multiOrigin) {
+          // Move all selected overlays together
+          const rawX = multiOrigin.origX + dx;
+          const rawY = multiOrigin.origY + dy;
+          return { ...o, x: snapToGrid(rawX), y: snapToGrid(rawY) };
+        }
+        if (o.id === id) {
+          const rawX = origin.origX + dx;
+          const rawY = origin.origY + dy;
+          return { ...o, x: snapToGrid(rawX), y: snapToGrid(rawY) };
+        }
+        return o;
+      }),
     );
   }, []);
 
-  /** Called when a drag gesture ends — clears origin ref */
   const endOverlayDrag = useCallback(() => {
     overlayDragOriginRef.current = null;
+    multiDragOriginsRef.current = new Map();
+    setIsDraggingOverlay(false);
   }, []);
 
-  /** Called when a resize gesture starts on an overlay — records origin size */
   const beginOverlayResize = useCallback(
     (id: string) => {
       const ov = overlays.find((o) => o.id === id);
@@ -447,7 +614,6 @@ export function useEditPdf() {
     [overlays],
   );
 
-  /** Called on every resize move delta — updates overlay size */
   const moveOverlayResize = useCallback(
     (id: string, dx: number, dy: number) => {
       const origin = overlayResizeOriginRef.current;
@@ -467,15 +633,13 @@ export function useEditPdf() {
     [],
   );
 
-  /** Called when a resize gesture ends — clears origin ref */
   const endOverlayResize = useCallback(() => {
     overlayResizeOriginRef.current = null;
   }, []);
 
   function deleteOverlay(id: string) {
-    // Save snapshot before deleting
-    if (pdfBytes)
-      saveSnapshot(pdfBytes, thumbnails, pagePreviews, overlays, currentPage);
+    // Push overlay undo snapshot before deleting
+    pushOverlayUndo(overlays);
     setOverlays((prev) => prev.filter((o) => o.id !== id));
     setSelectedId(null);
   }
@@ -524,12 +688,10 @@ export function useEditPdf() {
     const canvas = drawCanvasRef.current;
     if (!canvas || !pdfBytes) return;
     const dataUrl = canvas.toDataURL("image/png");
-    // Save snapshot before mutation
     saveSnapshot(pdfBytes, thumbnails, pagePreviews, overlays, currentPage);
     try {
       const newBytes = await applyDrawOverlay(pdfBytes, currentPage, dataUrl);
       setPdfBytes(newBytes);
-      // Re-render the current page preview
       const newPreview = await renderPagePreview(newBytes, currentPage);
       setPagePreviews((prev) => {
         const next = [...prev];
@@ -557,7 +719,6 @@ export function useEditPdf() {
     setSelectedOcrWord(null);
     setOcrEditText("");
     try {
-      // Draw the page preview data URL onto a canvas so we can pass it to Tesseract
       const dataUrl = pagePreviews[currentPage];
       const img = new Image();
       await new Promise<void>((resolve, reject) => {
@@ -583,23 +744,14 @@ export function useEditPdf() {
   async function commitOcrEdit() {
     if (!pdfBytes || !selectedOcrWord || !ocrEditText.trim()) return;
     const word = selectedOcrWord;
-
-    // Save snapshot before mutation
     saveSnapshot(pdfBytes, thumbnails, pagePreviews, overlays, currentPage);
-
     try {
-      // The bounding box coords are in preview image pixel space.
-      // renderPagePreview renders at 1.2x scale (viewport scale: 1.2).
-      // PDF points = preview_px / 1.2 * (72/96) = preview_px / 1.6
-      // But pdf-lib uses 72dpi points, and the preview canvas is at 96dpi * 1.2 = 115.2dpi
-      // So: pdf_pt = preview_px * (72 / 115.2) = preview_px * 0.625
-      const PREVIEW_SCALE = 1.2; // from renderPagePreview
-      const DPI_FACTOR = 72 / 96; // screen dpi to pdf points
-      const pxToPt = DPI_FACTOR / PREVIEW_SCALE; // 0.625
+      const PREVIEW_SCALE = 1.2;
+      const DPI_FACTOR = 72 / 96;
+      const pxToPt = DPI_FACTOR / PREVIEW_SCALE;
 
-      // Get the actual PDF page dimensions
       const previewDataUrl = pagePreviews[currentPage];
-      let previewH = 1010; // 842 * 1.2 default
+      let previewH = 1010;
       if (previewDataUrl) {
         const img = new Image();
         await new Promise<void>((resolve) => {
@@ -611,14 +763,9 @@ export function useEditPdf() {
           img.src = previewDataUrl;
         });
       }
-      // PDF page height in points (preview height / PREVIEW_SCALE * DPI_FACTOR)
       const pdfPageH = previewH * pxToPt;
-
       const bboxWidthPx = word.bbox.x1 - word.bbox.x0;
       const bboxHeightPx = word.bbox.y1 - word.bbox.y0;
-
-      // Step 1: Cover the original text with a white rectangle
-      // pdf-lib y=0 is bottom of page, so flip: pdfY = pdfPageH - bbox.y1 * pxToPt
       const rectX = word.bbox.x0 * pxToPt;
       const rectY = pdfPageH - word.bbox.y1 * pxToPt;
       const rectW = bboxWidthPx * pxToPt;
@@ -637,21 +784,18 @@ export function useEditPdf() {
       };
       let newBytes = await applyShapeOverlay(pdfBytes, currentPage, whiteRect);
 
-      // Step 2: Draw the new text — font size matches the original word height
       const fontSize = Math.max(6, Math.round(rectH * 0.85));
       const annotation: TextAnnotation = {
         pageIndex: currentPage,
         text: ocrEditText,
         x: rectX,
-        y: rectY + fontSize * 0.1, // small baseline offset
+        y: rectY + fontSize * 0.1,
         fontSize,
         color: "#000000",
       };
       newBytes = await addTextAnnotation(newBytes, annotation);
-
       setPdfBytes(newBytes);
 
-      // Refresh the current page preview and thumbnail
       const newPreview = await renderPagePreview(newBytes, currentPage);
       setPagePreviews((prev) => {
         const next = [...prev];
@@ -665,7 +809,6 @@ export function useEditPdf() {
         return next;
       });
 
-      // Clear OCR state after successful edit
       setSelectedOcrWord(null);
       setOcrEditText("");
       setOcrWords([]);
@@ -679,13 +822,10 @@ export function useEditPdf() {
   async function commitShape() {
     if (!pdfBytes || !pendingShape || !pagePreviews[currentPage]) return;
 
-    // Read the actual displayed image dimensions from the DOM — the preview
-    // image may be scaled down by CSS maxWidth, so we can't use a fixed factor.
     const previewImgEl = document.querySelector(
       ".editor-page-wrap img",
     ) as HTMLImageElement | null;
 
-    // Get actual PDF page dimensions for y-flip
     const sizes = await getPageSizes(pdfBytes);
     const pageH = sizes[currentPage]?.height ?? 842;
     const pageW = sizes[currentPage]?.width ?? 595;
@@ -697,7 +837,6 @@ export function useEditPdf() {
       scaleX = pageW / previewImgEl.clientWidth;
       scaleY = pageH / previewImgEl.clientHeight;
     } else {
-      // Fallback: theoretical 1.2× render scale at 96dpi → 72pt
       scaleX = 72 / 96 / 1.2;
       scaleY = 72 / 96 / 1.2;
     }
@@ -713,7 +852,6 @@ export function useEditPdf() {
       fillColor: shapeFillColor,
       strokeWidth: shapeStrokeWidth,
     };
-    // Save snapshot before mutation
     saveSnapshot(pdfBytes, thumbnails, pagePreviews, overlays, currentPage);
     try {
       const newBytes = await applyShapeOverlay(pdfBytes, currentPage, shape);
@@ -740,7 +878,6 @@ export function useEditPdf() {
 
   async function applyPageNumbersTool() {
     if (!pdfBytes) return;
-    // Save snapshot before mutation
     saveSnapshot(pdfBytes, thumbnails, pagePreviews, overlays, currentPage);
     try {
       const newBytes = await applyPageNumbers(
@@ -752,12 +889,9 @@ export function useEditPdf() {
           fontSize: pageNumSize,
           color: pageNumColor,
         },
-        () => {
-          // Progress is internal — no global store update needed for this tool
-        },
+        () => {},
       );
       setPdfBytes(newBytes);
-      // Refresh all thumbnails and previews
       const n = await getPageCount(newBytes);
       const newThumbs: string[] = [];
       const newPreviews: string[] = [];
@@ -781,67 +915,42 @@ export function useEditPdf() {
     updateProgress(0, "Applying edits…");
     try {
       let bytes = pdfBytes;
-
-      // Get actual PDF page dimensions (needed for coordinate conversion)
       const pageSizes = await getPageSizes(bytes);
-
-      // The preview image is rendered at 1.2× scale by renderPagePreview,
-      // then displayed in the browser with maxWidth constraint.
-      // We need to read the actual displayed image size from the DOM to get
-      // the correct pixel→point scale factor.
-      //
-      // The preview <img> is inside .editor-page-wrap. We query it here.
-      // If the DOM element isn't available (e.g. during testing), fall back
-      // to the natural image dimensions derived from the 1.2× render scale.
       const previewImgEl = document.querySelector(
         ".editor-page-wrap img",
       ) as HTMLImageElement | null;
 
-      // Apply all pending overlays in page order
       for (const ov of overlays) {
         const pageH = pageSizes[ov.pageIndex]?.height ?? 842;
         const pageW = pageSizes[ov.pageIndex]?.width ?? 595;
-
-        // Compute scale: overlay coords are in CSS display pixels of the preview img.
-        // naturalWidth = pageW * 1.2 * (96/72) — but renderPagePreview uses pdfjs
-        // which renders at 1.2 scale at 96dpi, so naturalWidth ≈ pageW * 1.2 * (96/72).
-        // Actually pdfjs viewport at scale 1.2 gives: width = pageW_pt * 1.2 * (96/72).
-        // So: pdf_pt = css_px * (naturalWidth / displayWidth) / (96/72) / 1.2
-        //           = css_px * (naturalWidth / displayWidth) * (72/96) / 1.2
-        //
-        // Simpler: scaleX = pageW / naturalWidth, then pdf_pt = css_px * (displayWidth / naturalWidth) * scaleX...
-        // Actually the cleanest formula:
-        //   pdf_pt_x = css_px_x * (pageW / displayWidth)
-        //   pdf_pt_y = css_px_y * (pageH / displayHeight)
-        // because displayWidth maps to pageW points and displayHeight maps to pageH points.
 
         let scaleX: number;
         let scaleY: number;
 
         if (previewImgEl && previewImgEl.clientWidth > 0) {
-          // Use actual displayed dimensions — most accurate
-          scaleX = pageW / previewImgEl.clientWidth;
-          scaleY = pageH / previewImgEl.clientHeight;
+          // Divide by zoom to get the unscaled canvas coordinates
+          scaleX = pageW / (previewImgEl.clientWidth / zoom);
+          scaleY = pageH / (previewImgEl.clientHeight / zoom);
         } else {
-          // Fallback: natural image size from 1.2× render at 96dpi
-          // naturalWidth = pageW * 1.2 * (96/72)
           const naturalW = pageW * 1.2 * (96 / 72);
           const naturalH = pageH * 1.2 * (96 / 72);
           scaleX = pageW / naturalW;
           scaleY = pageH / naturalH;
         }
 
+        // Divide overlay coordinates by zoom before passing to engine
+        const ovX = ov.x / zoom;
+        const ovY = ov.y / zoom;
+        const ovW = ov.width / zoom;
+        const ovH = ov.height / zoom;
+
         if (ov.type === "text" && ov.text) {
           const annotation: TextAnnotation = {
             pageIndex: ov.pageIndex,
             text: ov.text,
-            x: ov.x * scaleX,
-            // pdf-lib y=0 is bottom; CSS y=0 is top.
-            // ov.y is the top of the text box in CSS px.
-            // The text baseline sits at ov.y + fontSize (approx).
-            // Convert to PDF points: multiply by scaleY, then flip.
-            y: pageH - (ov.y + (ov.fontSize ?? 12)) * scaleY,
-            fontSize: ov.fontSize ?? 12,
+            x: ovX * scaleX,
+            y: pageH - (ovY + (ov.fontSize ?? 12) / zoom) * scaleY,
+            fontSize: (ov.fontSize ?? 12) / zoom,
             color: ov.color ?? "#000000",
             rotation: ov.rotation,
             opacity: ov.opacity,
@@ -851,10 +960,10 @@ export function useEditPdf() {
           bytes = await embedImageOverlay(bytes, {
             pageIndex: ov.pageIndex,
             dataUrl: ov.dataUrl,
-            x: (ov.x * scaleX) / pageW,
-            y: (pageH - (ov.y + ov.height) * scaleY) / pageH,
-            width: (ov.width * scaleX) / pageW,
-            height: (ov.height * scaleY) / pageH,
+            x: (ovX * scaleX) / pageW,
+            y: (pageH - (ovY + ovH) * scaleY) / pageH,
+            width: (ovW * scaleX) / pageW,
+            height: (ovH * scaleY) / pageH,
           });
         }
       }
@@ -878,6 +987,9 @@ export function useEditPdf() {
     setOverlays([]);
     setOriginalFile(null);
     setCurrentPage(0);
+    overlayUndoRef.current = [];
+    overlayRedoRef.current = [];
+    clearUndoRedo();
   }
 
   // ── Sign canvas helpers ────────────────────────────────────────────────────
@@ -889,6 +1001,7 @@ export function useEditPdf() {
     ctx.beginPath();
     ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
   }
+
   function doSignDraw(e: React.MouseEvent<HTMLCanvasElement>) {
     if (!isSignDrawing) return;
     const ctx = signCanvasRef.current?.getContext("2d");
@@ -900,10 +1013,12 @@ export function useEditPdf() {
     ctx.lineJoin = "round";
     ctx.stroke();
   }
+
   function endSignDraw() {
     setIsSignDrawing(false);
     setSignDataUrl(signCanvasRef.current?.toDataURL("image/png") ?? null);
   }
+
   function clearSignCanvas() {
     const ctx = signCanvasRef.current?.getContext("2d");
     if (ctx && signCanvasRef.current)
@@ -915,6 +1030,7 @@ export function useEditPdf() {
       );
     setSignDataUrl(null);
   }
+
   function renderTypedSign() {
     const canvas = signCanvasRef.current;
     if (!canvas || !signTypedName) return;
@@ -924,6 +1040,92 @@ export function useEditPdf() {
     ctx.fillStyle = "#1a1a2e";
     ctx.fillText(signTypedName, 10, 50);
     setSignDataUrl(canvas.toDataURL("image/png"));
+  }
+
+  // ── Sidebar resize (task 15.5) ────────────────────────────────────────────
+  const sidebarResizingRef = useRef(false);
+
+  const beginSidebarResize = useCallback(() => {
+    sidebarResizingRef.current = true;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!sidebarResizingRef.current) return;
+      // The sidebar starts at x=0; its right edge is at sidebarWidth
+      // We clamp to [220, 420]
+      const newWidth = Math.min(420, Math.max(220, e.clientX));
+      setSidebarWidth(newWidth);
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
+      sidebarResizingRef.current = false;
+      const newWidth = Math.min(420, Math.max(220, e.clientX));
+      setSidebarWidth(newWidth);
+      localStorage.setItem("aurora-sidebar-width", String(newWidth));
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, []);
+
+  // ── Thumbnail hover preview (task 15.8) ───────────────────────────────────
+  const handleThumbMouseEnter = useCallback((index: number) => {
+    thumbHoverTimerRef.current = setTimeout(() => {
+      setHoveredThumbIndex(index);
+    }, 300);
+  }, []);
+
+  const handleThumbMouseLeave = useCallback(() => {
+    if (thumbHoverTimerRef.current) {
+      clearTimeout(thumbHoverTimerRef.current);
+      thumbHoverTimerRef.current = null;
+    }
+    setHoveredThumbIndex(null);
+  }, []);
+
+  // ── Duplicate overlay (task 15.6) ─────────────────────────────────────────
+  function duplicateOverlay(id: string) {
+    const ov = overlays.find((o) => o.id === id);
+    if (!ov) return;
+    pushOverlayUndo(overlays);
+    const newId = `${Date.now()}`;
+    const duplicate: typeof ov = {
+      ...ov,
+      id: newId,
+      x: ov.x + 10,
+      y: ov.y + 10,
+    };
+    setOverlays((prev) => [...prev, duplicate]);
+    setSelectedId(newId);
+  }
+
+  // ── Bring overlay to front (task 15.6) ────────────────────────────────────
+  function bringOverlayToFront(id: string) {
+    pushOverlayUndo(overlays);
+    setOverlays((prev) => {
+      const idx = prev.findIndex((o) => o.id === id);
+      if (idx === -1) return prev;
+      const item = prev[idx];
+      return [...prev.filter((o) => o.id !== id), item];
+    });
+  }
+
+  // ── Select all overlays on current page (task 15.7) ───────────────────────
+  function selectAllOverlays() {
+    const ids = overlays
+      .filter((o) => o.pageIndex === currentPage)
+      .map((o) => o.id);
+    setSelectedIds(new Set(ids));
+    if (ids.length > 0) setSelectedId(ids[ids.length - 1]);
+  }
+
+  // ── Clear canvas overlays on current page (task 15.7) ─────────────────────
+  function clearCanvasOverlays() {
+    pushOverlayUndo(overlays);
+    setOverlays((prev) => prev.filter((o) => o.pageIndex !== currentPage));
+    setSelectedId(null);
+    setSelectedIds(new Set());
   }
 
   const currentOverlays = overlays.filter((o) => o.pageIndex === currentPage);
@@ -947,6 +1149,9 @@ export function useEditPdf() {
     setOverlays,
     selectedId,
     setSelectedId,
+    // Multi-select (task 15.3)
+    selectedIds,
+    setSelectedIds,
     activeTool,
     setActiveTool,
     deleteConfirm,
@@ -955,6 +1160,9 @@ export function useEditPdf() {
     setDragSrc,
     dragOver,
     setDragOver,
+    // Undo/redo state for toolbar button disabled state
+    overlayUndoCount: undoStack.length,
+    overlayRedoCount: redoStack.length,
     textInput,
     setTextInput,
     textSize,
@@ -985,7 +1193,6 @@ export function useEditPdf() {
     setWmColor,
     wmRotation,
     setWmRotation,
-    // Draw tool
     drawCanvasRef,
     isDrawing,
     drawStrokeColor,
@@ -997,7 +1204,6 @@ export function useEditPdf() {
     endDraw,
     clearDrawCanvas,
     commitDrawing,
-    // Shape tool
     shapeType,
     setShapeType,
     shapeStrokeColor,
@@ -1009,7 +1215,6 @@ export function useEditPdf() {
     pendingShape,
     setPendingShape,
     commitShape,
-    // OCR Edit tool
     ocrWords,
     ocrLoading,
     selectedOcrWord,
@@ -1018,7 +1223,6 @@ export function useEditPdf() {
     setOcrEditText,
     runOcrOnPage,
     commitOcrEdit,
-    // Page Numbers tool
     pageNumPosition,
     setPageNumPosition,
     pageNumFormat,
@@ -1045,5 +1249,25 @@ export function useEditPdf() {
     handleExport,
     handleReset,
     handleUndo,
+    // Snap-to-grid (task 15.2)
+    isDraggingOverlay,
+    // Zoom (task 15.4)
+    zoom,
+    setZoom,
+    // Sidebar resize (task 15.5)
+    sidebarWidth,
+    beginSidebarResize,
+    // Inline toolbar helpers (task 15.6)
+    duplicateOverlay,
+    bringOverlayToFront,
+    // Context menu (task 15.7)
+    contextMenuPos,
+    setContextMenuPos,
+    selectAllOverlays,
+    clearCanvasOverlays,
+    // Thumbnail hover preview (task 15.8)
+    hoveredThumbIndex,
+    handleThumbMouseEnter,
+    handleThumbMouseLeave,
   };
 }

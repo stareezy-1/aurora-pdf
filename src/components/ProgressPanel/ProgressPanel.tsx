@@ -1,4 +1,44 @@
+import { useEffect, useRef, useState } from "react";
 import type { ProgressPanelProps } from "./ProgressPanel.types";
+
+/**
+ * Updates the browser tab title to `⚡ {pct}% — {toolName}` while processing,
+ * and restores the original title on unmount.
+ */
+function useProcessingTitle(
+  active: boolean,
+  pct: number,
+  toolName?: string,
+): void {
+  const originalTitle = useRef<string>("");
+
+  useEffect(() => {
+    if (!active || !toolName) return;
+
+    // Capture original title on first activation
+    if (!originalTitle.current) {
+      originalTitle.current = document.title;
+    }
+
+    document.title = `⚡ ${pct}% — ${toolName}`;
+
+    return () => {
+      // Restore on unmount or when no longer active
+      if (originalTitle.current) {
+        document.title = originalTitle.current;
+        originalTitle.current = "";
+      }
+    };
+  }, [active, pct, toolName]);
+
+  // Restore title when processing stops (active becomes false)
+  useEffect(() => {
+    if (!active && originalTitle.current) {
+      document.title = originalTitle.current;
+      originalTitle.current = "";
+    }
+  }, [active]);
+}
 
 export function ProgressPanel({
   status,
@@ -6,7 +46,27 @@ export function ProgressPanel({
   label,
   errorMessage,
   onRetry,
+  indeterminate = false,
+  showReassurance = false,
+  toolName,
 }: ProgressPanelProps) {
+  const isProcessing = status === "processing";
+  const pct = Math.min(100, Math.max(0, progress));
+
+  // Show reassurance message after 3s of processing
+  const [reassuranceVisible, setReassuranceVisible] = useState(false);
+  useEffect(() => {
+    if (!isProcessing) {
+      setReassuranceVisible(false);
+      return;
+    }
+    const timer = setTimeout(() => setReassuranceVisible(true), 3000);
+    return () => clearTimeout(timer);
+  }, [isProcessing]);
+
+  // Tab title update during processing
+  useProcessingTitle(isProcessing && !!toolName, pct, toolName);
+
   if (status === "idle") return null;
 
   if (status === "error") {
@@ -51,13 +111,13 @@ export function ProgressPanel({
     );
   }
 
-  // processing
-  const pct = Math.min(100, Math.max(0, progress));
+  // processing state
   return (
     <div
       className="card fade-in"
       role="status"
       aria-live="polite"
+      aria-label={label || "Processing…"}
       style={{ marginTop: 20 }}
     >
       <div
@@ -71,12 +131,16 @@ export function ProgressPanel({
         <span style={{ fontSize: 13, color: "var(--text-2)", fontWeight: 500 }}>
           {label || "Processing…"}
         </span>
-        <span style={{ fontSize: 13, color: "var(--green)", fontWeight: 700 }}>
-          {pct}%
-        </span>
+        {!indeterminate && (
+          <span
+            style={{ fontSize: 13, color: "var(--green)", fontWeight: 700 }}
+          >
+            {pct}%
+          </span>
+        )}
       </div>
 
-      {/* Track */}
+      {/* Progress bar track */}
       <div
         style={{
           height: 8,
@@ -86,49 +150,65 @@ export function ProgressPanel({
           position: "relative",
         }}
       >
-        {/* Fill */}
-        <div
-          style={{
-            height: "100%",
-            width: `${pct}%`,
-            borderRadius: 4,
-            background: "linear-gradient(90deg, var(--green), #00ccff)",
-            transition: "width 0.4s cubic-bezier(0.4,0,0.2,1)",
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          {/* Shimmer */}
+        {indeterminate ? (
+          /* Indeterminate shimmer bar */
           <div
             style={{
               position: "absolute",
               inset: 0,
               background:
-                "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)",
+                "linear-gradient(90deg, transparent 0%, var(--green) 40%, #00ccff 60%, transparent 100%)",
               backgroundSize: "200% 100%",
               animation: "shimmer 1.5s infinite",
             }}
           />
-        </div>
-
-        {/* Star dots */}
-        {[0, 0.3, 0.6, 0.9, 1.2].map((delay, i) => (
-          <span
-            key={i}
+        ) : (
+          /* Determinate fill bar */
+          <div
             style={{
-              position: "absolute",
-              top: "50%",
-              transform: "translateY(-50%)",
-              left: `${Math.max(0, pct - 8 - i * 4)}%`,
-              width: 4,
-              height: 4,
-              borderRadius: "50%",
-              background: "var(--green)",
-              animation: `star-drift 1.4s ${delay}s ease-in-out infinite`,
-              opacity: 0,
+              height: "100%",
+              width: `${pct}%`,
+              borderRadius: 4,
+              background: "linear-gradient(90deg, var(--green), #00ccff)",
+              transition:
+                "width 400ms var(--ease-inout, cubic-bezier(0.4,0,0.2,1))",
+              position: "relative",
+              overflow: "hidden",
             }}
-          />
-        ))}
+          >
+            {/* Shimmer overlay on fill */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background:
+                  "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)",
+                backgroundSize: "200% 100%",
+                animation: "shimmer 1.5s infinite",
+              }}
+            />
+          </div>
+        )}
+
+        {/* Star dots (only for determinate mode) */}
+        {!indeterminate &&
+          [0, 0.3, 0.6, 0.9, 1.2].map((delay, i) => (
+            <span
+              key={i}
+              style={{
+                position: "absolute",
+                top: "50%",
+                transform: "translateY(-50%)",
+                left: `${Math.max(0, pct - 8 - i * 4)}%`,
+                width: 4,
+                height: 4,
+                borderRadius: "50%",
+                background: "var(--green)",
+                animation: `star-drift 1.4s ${delay}s ease-in-out infinite`,
+                opacity: 0,
+              }}
+            />
+          ))}
       </div>
 
       {/* Spinner row */}
@@ -150,6 +230,24 @@ export function ProgressPanel({
           Working in your browser — no uploads
         </span>
       </div>
+
+      {/* Reassurance message — shown after 3s or when showReassurance prop is true */}
+      {(showReassurance || reassuranceVisible) && (
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: "var(--green)",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            animation: "fadeIn 0.4s ease both",
+          }}
+          aria-live="polite"
+        >
+          🛡 Running locally in your browser — no uploads needed.
+        </div>
+      )}
     </div>
   );
 }

@@ -9,6 +9,21 @@ import type { WatermarkPlacement } from "@/types/tool.types";
 
 const PDF_ACCEPT = [{ mime: "application/pdf", extension: ".pdf" }];
 
+const FONT_FAMILIES = [
+  "Helvetica",
+  "Times New Roman",
+  "Courier",
+  "Georgia",
+  "Verdana",
+  "Arial",
+  "Trebuchet MS",
+  "Palatino",
+  "Garamond",
+  "Bookman",
+  "Comic Sans MS",
+  "Impact",
+];
+
 export default function WatermarkPage() {
   usePageTitle("Add Watermark");
   const vm = useWatermark();
@@ -51,7 +66,20 @@ export default function WatermarkPage() {
 
   return (
     <ToolLayout toolName="Add Watermark" wide>
-      <div className="editor-shell">
+      {/* Mobile responsive styles */}
+      <style>{`
+        @media (max-width: 768px) {
+          .watermark-shell {
+            flex-direction: column !important;
+          }
+          .watermark-shell .editor-sidebar {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+        }
+      `}</style>
+
+      <div className="editor-shell watermark-shell">
         {/* Sidebar */}
         <aside className="editor-sidebar">
           <div className="editor-sidebar-header">💧 Add Watermark</div>
@@ -92,22 +120,10 @@ export default function WatermarkPage() {
                 value={vm.config.fontFamily}
                 onChange={(e) => vm.update({ fontFamily: e.target.value })}
                 aria-label="Font family"
+                style={{ fontFamily: vm.config.fontFamily }}
               >
-                {[
-                  "Helvetica",
-                  "Times New Roman",
-                  "Courier",
-                  "Georgia",
-                  "Verdana",
-                  "Arial",
-                  "Trebuchet MS",
-                  "Palatino",
-                  "Garamond",
-                  "Bookman",
-                  "Comic Sans MS",
-                  "Impact",
-                ].map((f) => (
-                  <option key={f} value={f}>
+                {FONT_FAMILIES.map((f) => (
+                  <option key={f} value={f} style={{ fontFamily: f }}>
                     {f}
                   </option>
                 ))}
@@ -233,7 +249,7 @@ export default function WatermarkPage() {
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => vm.setCurrentPage((p) => Math.max(0, p - 1))}
-                    disabled={vm.currentPage === 0}
+                    disabled={vm.currentPage === 0 || vm.previewAllPages}
                   >
                     ‹
                   </button>
@@ -247,11 +263,26 @@ export default function WatermarkPage() {
                         Math.min(vm.pageCount - 1, p + 1),
                       )
                     }
-                    disabled={vm.currentPage === vm.pageCount - 1}
+                    disabled={
+                      vm.currentPage === vm.pageCount - 1 || vm.previewAllPages
+                    }
                   >
                     ›
                   </button>
                 </div>
+
+                <button
+                  className={`btn btn-sm${
+                    vm.previewAllPages ? " btn-primary" : " btn-secondary"
+                  }`}
+                  onClick={vm.togglePreviewAllPages}
+                  aria-pressed={vm.previewAllPages}
+                  style={{ marginTop: 8, width: "100%" }}
+                >
+                  {vm.previewAllPages
+                    ? "⏹ Stop preview"
+                    : "▶ Preview all pages"}
+                </button>
               </div>
             )}
           </div>
@@ -278,6 +309,17 @@ export default function WatermarkPage() {
           <div className="editor-canvas-toolbar">
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
               Live preview — page {vm.currentPage + 1} of {vm.pageCount}
+              {vm.previewAllPages && (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    color: "var(--green)",
+                    fontWeight: 600,
+                  }}
+                >
+                  ● Auto-cycling
+                </span>
+              )}
             </span>
             <span
               style={{
@@ -291,16 +333,28 @@ export default function WatermarkPage() {
           </div>
 
           {vm.pagePreviews[vm.currentPage] ? (
-            <div className="editor-page-wrap" style={{ cursor: "default" }}>
+            <div
+              className="editor-page-wrap"
+              style={{ cursor: "default", position: "relative" }}
+            >
               <img
                 src={vm.pagePreviews[vm.currentPage]}
                 alt={`Page ${vm.currentPage + 1}`}
                 style={{ display: "block", maxWidth: "min(860px, 100%)" }}
                 draggable={false}
               />
-              <span style={vm.getWmStyle()} aria-hidden="true">
-                {vm.config.text}
-              </span>
+              {/* Canvas overlay — draws watermark accurately matching engine output */}
+              <canvas
+                ref={vm.canvasRef}
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  pointerEvents: "none",
+                }}
+              />
             </div>
           ) : (
             <div

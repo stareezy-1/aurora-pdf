@@ -6,14 +6,21 @@ import * as pdfjsLib from "pdfjs-dist";
 import { router } from "./router";
 import { useAuroraStore } from "@/stores/aurora.store";
 import { ErrorBoundary } from "@/error/ErrorBoundary";
+import { Workbox } from "workbox-window";
 
-// Register service worker (PWA)
+// Register service worker via workbox-window (PWA)
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      // SW registration failed — app still works without it
+  const wb = new Workbox("/sw.js");
+
+  // When a new SW is waiting to activate, store the registration so the
+  // UpdateNotification component can prompt the user to reload.
+  wb.addEventListener("waiting", () => {
+    void wb.register().then((reg) => {
+      if (reg) useAuroraStore.getState().setSwUpdate(reg);
     });
   });
+
+  void wb.register();
 }
 
 // Configure pdfjs worker

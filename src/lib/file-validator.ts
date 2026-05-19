@@ -24,7 +24,9 @@ export function validateFile(
   if (file.size > maxBytes) {
     return {
       valid: false,
-      errorMessage: `File exceeds the ${maxSizeMb} MB size limit (${(file.size / 1024 / 1024).toFixed(2)} MB).`,
+      errorMessage: `File is ${(file.size / 1024 / 1024).toFixed(
+        1,
+      )} MB — max allowed is ${maxSizeMb} MB`,
     };
   }
 
@@ -41,7 +43,9 @@ export function validateFile(
       .join(", ");
     return {
       valid: false,
-      errorMessage: `Unsupported file type "${ext || file.type}". Accepted formats: ${acceptedList}.`,
+      errorMessage: `Unsupported file type "${
+        ext || file.type
+      }". Accepted formats: ${acceptedList}.`,
     };
   }
 

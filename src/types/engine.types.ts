@@ -34,6 +34,7 @@ export interface TextAnnotation {
 export interface OcrPageResult {
   text: string;
   imageIndex: number;
+  confidence?: number; // 0–100, from Tesseract mean confidence
 }
 
 export interface ShapeAnnotation {
@@ -46,4 +47,18 @@ export interface ShapeAnnotation {
   strokeColor: string; // hex
   fillColor: string | null; // hex or null for no fill
   strokeWidth: number; // pt
+}
+
+export interface OcrWord {
+  text: string;
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+  confidence: number;
+}
+
+export interface SearchablePdfPage {
+  pageIndex: number;
+  imageDataUrl: string; // JPEG data URL of the rendered page
+  imageWidth: number; // canvas pixel width
+  imageHeight: number; // canvas pixel height
+  words: OcrWord[];
 }

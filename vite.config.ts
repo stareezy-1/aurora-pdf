@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       includeAssets: [
         "favicon.svg",
         "icon-192.svg",
@@ -22,6 +22,7 @@ export default defineConfig({
         theme_color: "#050505",
         background_color: "#050505",
         display: "standalone",
+        display_override: ["window-controls-overlay", "standalone"],
         start_url: "/",
         orientation: "any",
         categories: ["productivity", "utilities"],
@@ -56,18 +57,76 @@ export default defineConfig({
             url: "/ocr",
             description: "Extract text from images",
           },
-          { name: "Edit PDF", url: "/edit", description: "Edit PDF pages" },
+          {
+            name: "Searchable PDF OCR",
+            url: "/searchable-pdf",
+            description: "Make scanned PDFs searchable",
+          },
+          {
+            name: "PDF to JPG",
+            url: "/pdf-to-jpg",
+            description: "Convert PDF pages to images",
+          },
+          {
+            name: "PDF to Word",
+            url: "/pdf-to-word",
+            description: "Convert PDF to Word document",
+          },
+          {
+            name: "Word to PDF",
+            url: "/word-to-pdf",
+            description: "Convert Word document to PDF",
+          },
+          {
+            name: "PDF to Excel",
+            url: "/pdf-to-excel",
+            description: "Convert PDF to Excel spreadsheet",
+          },
+          {
+            name: "Excel to PDF",
+            url: "/excel-to-pdf",
+            description: "Convert Excel spreadsheet to PDF",
+          },
+          {
+            name: "Edit PDF",
+            url: "/edit",
+            description: "Edit PDF pages",
+          },
           {
             name: "Sign PDF",
             url: "/sign",
             description: "Add digital signature",
           },
+          {
+            name: "Add Watermark",
+            url: "/watermark",
+            description: "Add watermark to PDF",
+          },
+          {
+            name: "Split PDF",
+            url: "/split",
+            description: "Split PDF into parts",
+          },
+          {
+            name: "Organize PDF",
+            url: "/organize",
+            description: "Reorder and delete PDF pages",
+          },
+          {
+            name: "HTML to PDF",
+            url: "/html-to-pdf",
+            description: "Convert HTML page to PDF",
+          },
+          {
+            name: "Protect PDF",
+            url: "/protect",
+            description: "Password-protect a PDF",
+          },
         ],
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        // Don't cache heavy WASM/worker files — they're too large and change often
-        globIgnores: ["**/pdf.worker*", "**/tesseract*"],
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2,wasm,mjs}"],
+        // Include pdf.worker* and tesseract* in precache (removed globIgnores)
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
@@ -77,9 +136,36 @@ export default defineConfig({
               expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
             },
           },
+          {
+            // StaleWhileRevalidate for same-origin JS/WASM chunks
+            urlPattern: ({ url }: { url: URL }) =>
+              url.origin === self.location.origin &&
+              (url.pathname.endsWith(".js") ||
+                url.pathname.endsWith(".mjs") ||
+                url.pathname.endsWith(".wasm")),
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "aurora-runtime",
+              expiration: { maxEntries: 60 },
+            },
+          },
+          {
+            // CacheFirst for cdn.jsdelivr.net assets
+            urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "aurora-cdn",
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
+          },
         ],
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//],
+        skipWaiting: false,
+        cleanupOutdatedCaches: true,
       },
       devOptions: { enabled: false },
     }),

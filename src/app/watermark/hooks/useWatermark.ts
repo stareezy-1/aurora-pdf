@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useFileProcessor } from "@/hooks/useFileProcessor";
 import { useAuroraStore } from "@/stores/aurora.store";
 import {
@@ -37,19 +37,81 @@ export function useWatermark() {
   const [pagePreviews, setPagePreviews] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [config, setConfig] = useState<WatermarkConfig>(DEFAULT_CONFIG);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [previewAllPages, setPreviewAllPages] = useState(false);
 
-  // Overlay drag position — null means use placement-based positioning
-  // NOTE: drag-to-reposition is intentionally removed — the placement tabs
-  // (Diagonal / Header / Footer) map directly to the engine's PLACEMENT_COORDS
-  // and produce pixel-perfect results. A free-drag approach requires converting
-  // CSS pixels of a scaled preview to PDF points, which is unreliable across
-  // different screen sizes and zoom levels.
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Draw watermark on canvas overlay whenever config, previews, or current page changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const imgSrc = pagePreviews[currentPage];
+    if (!imgSrc) return;
+
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+
+      ctx.globalAlpha = config.opacity / 100;
+      ctx.font = `bold ${config.fontSize}px ${config.fontFamily}, sans-serif`;
+      ctx.fillStyle = config.color;
+
+      if (config.placement === "diagonal") {
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((-config.rotation * Math.PI) / 180);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(config.text, 0, 0);
+      } else if (config.placement === "header") {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(config.text, canvas.width / 2, canvas.height * 0.04);
+      } else {
+        // footer
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(config.text, canvas.width / 2, canvas.height * 0.96);
+      }
+
+      ctx.restore();
+    };
+    img.src = imgSrc;
+  }, [config, pagePreviews, currentPage]);
+
+  // "Preview all pages" cycling — advance page every 1.5s
+  useEffect(() => {
+    if (previewAllPages && pageCount > 1) {
+      intervalRef.current = setInterval(() => {
+        setCurrentPage((p) => (p + 1) % pageCount);
+      }, 1500);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [previewAllPages, pageCount]);
+
+  const togglePreviewAllPages = useCallback(() => {
+    setPreviewAllPages((prev) => !prev);
+  }, []);
 
   const processor = useFileProcessor({
     process: async (file, onProgress) => {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      // Always use placement-based applyWatermark — reliable and accurate
       const result = await applyWatermark(bytes, config, onProgress);
       return {
         blob: new Blob([new Uint8Array(result)], { type: "application/pdf" }),
@@ -57,15 +119,6 @@ export function useWatermark() {
       };
     },
   });
-
-  // Debounced preview refresh (previews already loaded on drop — no-op)
-  useEffect(() => {
-    if (!pdfBytes) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      // previews already loaded on drop
-    }, 300);
-  }, [pdfBytes, config]);
 
   async function handleFileDrop(files: File[]) {
     const file = files[0];
@@ -92,39 +145,11 @@ export function useWatermark() {
     setPdfBytes(null);
     setPagePreviews([]);
     setConfig(DEFAULT_CONFIG);
+    setPreviewAllPages(false);
   }
 
-  function getWmStyle(): React.CSSProperties {
-    const base: React.CSSProperties = {
-      position: "absolute",
-      color: config.color,
-      fontSize: Math.max(8, config.fontSize * 0.22),
-      opacity: config.opacity / 100,
-      fontWeight: 700,
-      pointerEvents: "none",
-      whiteSpace: "nowrap",
-      textShadow: "0 1px 2px rgba(0,0,0,0.15)",
-      userSelect: "none",
-    };
-
-    if (config.placement === "diagonal") {
-      return {
-        ...base,
-        top: "40%",
-        left: "10%",
-        transform: `rotate(-${config.rotation}deg)`,
-      };
-    } else if (config.placement === "header") {
-      return { ...base, top: "4%", left: "50%", transform: "translateX(-50%)" };
-    } else {
-      return {
-        ...base,
-        bottom: "4%",
-        left: "50%",
-        transform: "translateX(-50%)",
-      };
-    }
-  }
+  // Keep pdfBytes in state but suppress unused warning
+  void pdfBytes;
 
   return {
     status,
@@ -144,6 +169,8 @@ export function useWatermark() {
     handleFileDrop,
     update,
     handleReset,
-    getWmStyle,
+    canvasRef,
+    previewAllPages,
+    togglePreviewAllPages,
   };
 }

@@ -1,26 +1,69 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router";
 import { useAuroraStore } from "@/stores/aurora.store";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { PwaInstallModal } from "@/components/PwaInstallModal/PwaInstallModal";
 import type { NavBarProps } from "./NavBar.types";
 
+// Category groupings for desktop nav dividers
 const TOOL_LINKS = [
-  { path: "/compress", label: "Compress PDF", icon: "🗜️" },
-  { path: "/ocr", label: "OCR to PDF", icon: "🔍" },
-  { path: "/pdf-to-jpg", label: "PDF to JPG", icon: "🖼️" },
-  { path: "/pdf-to-word", label: "PDF to Word", icon: "📝" },
-  { path: "/word-to-pdf", label: "Word to PDF", icon: "📄" },
-  { path: "/pdf-to-excel", label: "PDF to Excel", icon: "📊" },
-  { path: "/excel-to-pdf", label: "Excel to PDF", icon: "📋" },
-  { path: "/edit", label: "Edit PDF", icon: "✏️" },
-  { path: "/sign", label: "Sign PDF", icon: "✍️" },
-  { path: "/watermark", label: "Add Watermark", icon: "💧" },
-  { path: "/split", label: "Split PDF", icon: "✂️" },
-  { path: "/html-to-pdf", label: "HTML to PDF", icon: "🌐" },
-  { path: "/organize", label: "Organize PDF", icon: "📑" },
-  { path: "/protect", label: "Protect PDF", icon: "🔐" },
-];
+  // Convert
+  { path: "/ocr", label: "OCR to PDF", icon: "🔍", category: "Convert" },
+  {
+    path: "/searchable-pdf",
+    label: "Searchable PDF OCR",
+    icon: "🔎",
+    category: "Convert",
+  },
+  { path: "/pdf-to-jpg", label: "PDF to JPG", icon: "🖼️", category: "Convert" },
+  {
+    path: "/pdf-to-word",
+    label: "PDF to Word",
+    icon: "📝",
+    category: "Convert",
+  },
+  {
+    path: "/word-to-pdf",
+    label: "Word to PDF",
+    icon: "📄",
+    category: "Convert",
+  },
+  {
+    path: "/pdf-to-excel",
+    label: "PDF to Excel",
+    icon: "📊",
+    category: "Convert",
+  },
+  {
+    path: "/excel-to-pdf",
+    label: "Excel to PDF",
+    icon: "📋",
+    category: "Convert",
+  },
+  {
+    path: "/html-to-pdf",
+    label: "HTML to PDF",
+    icon: "🌐",
+    category: "Convert",
+  },
+  // Edit
+  { path: "/edit", label: "Edit PDF", icon: "✏️", category: "Edit" },
+  { path: "/sign", label: "Sign PDF", icon: "✍️", category: "Edit" },
+  { path: "/watermark", label: "Add Watermark", icon: "💧", category: "Edit" },
+  { path: "/split", label: "Split PDF", icon: "✂️", category: "Edit" },
+  { path: "/organize", label: "Organize PDF", icon: "📑", category: "Edit" },
+  // Optimize
+  {
+    path: "/compress",
+    label: "Compress PDF",
+    icon: "🗜️",
+    category: "Optimize",
+  },
+  // Security
+  { path: "/protect", label: "Protect PDF", icon: "🔐", category: "Security" },
+] as const;
+
+const CATEGORY_ORDER = ["Convert", "Edit", "Optimize", "Security"] as const;
 
 const STATUS_CONFIG = {
   idle: { icon: "🛡", text: "Local Mode", cls: "badge-green" },
@@ -33,7 +76,10 @@ export function NavBar({ currentPath }: NavBarProps) {
   const status = useAuroraStore((s) => s.status);
   const theme = useAuroraStore((s) => s.theme);
   const toggleTheme = useAuroraStore((s) => s.toggleTheme);
+  const isOnline = useAuroraStore((s) => s.isOnline);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
   const location = useLocation();
   const sc = STATUS_CONFIG[status];
   const pwa = usePwaInstall();
@@ -51,21 +97,53 @@ export function NavBar({ currentPath }: NavBarProps) {
     };
   }, [drawerOpen]);
 
+  // Scroll-aware blur
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 40);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Build desktop nav with category dividers
+  const desktopNavItems: Array<
+    | { type: "link"; path: string; label: string }
+    | { type: "divider"; key: string }
+  > = [];
+
+  CATEGORY_ORDER.forEach((cat, catIdx) => {
+    const links = TOOL_LINKS.filter((t) => t.category === cat);
+    if (links.length === 0) return;
+    if (catIdx > 0) {
+      desktopNavItems.push({ type: "divider", key: `divider-${cat}` });
+    }
+    links.forEach((l) =>
+      desktopNavItems.push({ type: "link", path: l.path, label: l.label }),
+    );
+  });
+
   return (
     <>
       <nav
+        ref={navRef}
+        className={scrolled ? "nav-scrolled" : undefined}
         style={{
           position: "sticky",
           top: 0,
           zIndex: 100,
           background: "var(--surface)",
-          borderBottom: "1px solid var(--border)",
+          borderBottom: `1px solid ${
+            scrolled ? "var(--border-2)" : "var(--border)"
+          }`,
           padding: "0 20px",
           height: 56,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          backdropFilter: "blur(12px)",
+          backdropFilter: scrolled ? "blur(20px)" : "blur(12px)",
+          transition:
+            "backdrop-filter var(--dur-normal) var(--ease-out), border-color var(--dur-normal) var(--ease-out)",
         }}
         aria-label="Main navigation"
       >
@@ -97,7 +175,7 @@ export function NavBar({ currentPath }: NavBarProps) {
           </span>
         </Link>
 
-        {/* Desktop links — single scrollable row */}
+        {/* Desktop links — single scrollable row with category dividers */}
         <div
           className="desktop-nav"
           style={{
@@ -113,29 +191,52 @@ export function NavBar({ currentPath }: NavBarProps) {
           }}
           role="list"
         >
-          {TOOL_LINKS.map(({ path, label }) => (
-            <Link
-              key={path}
-              to={path}
-              role="listitem"
-              aria-current={currentPath === path ? "page" : undefined}
-              style={{
-                textDecoration: "none",
-                fontSize: 12,
-                fontWeight: 500,
-                padding: "4px 9px",
-                borderRadius: "var(--radius-sm)",
-                color: currentPath === path ? "var(--green)" : "var(--text-2)",
-                background:
-                  currentPath === path ? "rgba(0,255,136,0.1)" : "transparent",
-                transition: "all 0.15s",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-              }}
-            >
-              {label}
-            </Link>
-          ))}
+          {desktopNavItems.map((item) => {
+            if (item.type === "divider") {
+              return (
+                <span
+                  key={item.key}
+                  aria-hidden="true"
+                  style={{
+                    display: "inline-block",
+                    width: 1,
+                    height: 16,
+                    background: "var(--border)",
+                    margin: "0 4px",
+                    flexShrink: 0,
+                  }}
+                />
+              );
+            }
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                role="listitem"
+                aria-current={currentPath === item.path ? "page" : undefined}
+                style={{
+                  textDecoration: "none",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  padding: "4px 9px",
+                  borderRadius: "var(--radius-sm)",
+                  color:
+                    currentPath === item.path
+                      ? "var(--green)"
+                      : "var(--text-2)",
+                  background:
+                    currentPath === item.path
+                      ? "rgba(0,255,136,0.1)"
+                      : "transparent",
+                  transition: "all 0.15s",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                }}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
 
         {/* Desktop right */}
@@ -143,9 +244,34 @@ export function NavBar({ currentPath }: NavBarProps) {
           className="nav-right-desktop"
           style={{ display: "flex", alignItems: "center", gap: 10 }}
         >
-          <span className={`badge ${sc.cls}`}>
-            {sc.icon} {sc.text}
-          </span>
+          {/* Offline badge replaces status badge when offline */}
+          {!isOnline ? (
+            <span
+              className="badge badge-amber"
+              style={{ opacity: 1, transition: "opacity 200ms" }}
+            >
+              📡 Offline
+            </span>
+          ) : (
+            <span
+              className={`badge ${sc.cls}`}
+              style={{ opacity: 1, transition: "opacity 200ms" }}
+            >
+              <span
+                style={
+                  status === "processing"
+                    ? {
+                        animation: "pulse 1.2s ease infinite",
+                        display: "inline-block",
+                      }
+                    : undefined
+                }
+              >
+                {sc.icon}
+              </span>{" "}
+              {sc.text}
+            </span>
+          )}
           {pwa.state === "available" && (
             <button
               onClick={pwa.openModal}
@@ -187,12 +313,13 @@ export function NavBar({ currentPath }: NavBarProps) {
           </button>
         </div>
 
-        {/* Hamburger */}
+        {/* Hamburger — min 44×44px touch target */}
         <button
           className="hamburger-btn"
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
           aria-expanded={drawerOpen}
+          style={{ minWidth: 44, minHeight: 44 }}
         >
           ☰
         </button>
@@ -279,12 +406,33 @@ export function NavBar({ currentPath }: NavBarProps) {
         </div>
 
         <div className="nav-drawer-footer">
-          <span
-            className={`badge ${sc.cls}`}
-            style={{ alignSelf: "flex-start" }}
-          >
-            {sc.icon} {sc.text}
-          </span>
+          {!isOnline ? (
+            <span
+              className="badge badge-amber"
+              style={{ alignSelf: "flex-start" }}
+            >
+              📡 Offline
+            </span>
+          ) : (
+            <span
+              className={`badge ${sc.cls}`}
+              style={{ alignSelf: "flex-start" }}
+            >
+              <span
+                style={
+                  status === "processing"
+                    ? {
+                        animation: "pulse 1.2s ease infinite",
+                        display: "inline-block",
+                      }
+                    : undefined
+                }
+              >
+                {sc.icon}
+              </span>{" "}
+              {sc.text}
+            </span>
+          )}
           {pwa.state === "available" && (
             <button
               onClick={() => {

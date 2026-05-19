@@ -2,6 +2,8 @@ import { ToolLayout } from "@/components/ToolLayout/ToolLayout";
 import { FileDropZone } from "@/components/FileDropZone/FileDropZone";
 import { ProgressPanel } from "@/components/ProgressPanel/ProgressPanel";
 import { PrivacyShield } from "@/components/PrivacyShield/PrivacyShield";
+import { CompressionSizeEstimate } from "@/components/CompressionSizeEstimate/CompressionSizeEstimate";
+import { BeforeAfterBar } from "@/components/BeforeAfterBar/BeforeAfterBar";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useAuroraStore } from "@/stores/aurora.store";
 import { formatCompressionStats } from "@/lib/format-utils";
@@ -9,6 +11,19 @@ import type { CompressionLevel } from "@/types/tool.types";
 import { useCompressPdf } from "./hooks/useCompressPdf";
 
 const PDF_ACCEPT = [{ mime: "application/pdf", extension: ".pdf" }];
+
+/** Quality dots: 5 dots total, filled count indicates quality (higher = better quality) */
+const QUALITY_DOTS: Record<CompressionLevel, number> = {
+  low: 5,
+  standard: 3,
+  high: 1,
+};
+
+const LEVEL_TOOLTIPS: Record<CompressionLevel, string> = {
+  low: "Minimal compression — preserves original quality, reduces size by ~10–20%",
+  standard: "Balanced — good quality reduction, reduces size by ~30–50%",
+  high: "Maximum compression — noticeable quality loss, reduces size by ~50–70%",
+};
 
 const LEVELS: {
   value: CompressionLevel;
@@ -36,12 +51,38 @@ const LEVELS: {
   },
 ];
 
+function QualityDots({ level }: { level: CompressionLevel }) {
+  const filled = QUALITY_DOTS[level];
+  return (
+    <span
+      style={{ fontSize: 11, letterSpacing: 1, color: "var(--text-muted)" }}
+      aria-label={`Quality: ${filled} out of 5`}
+    >
+      {Array.from({ length: 5 }, (_, i) => (i < filled ? "●" : "○")).join("")}
+    </span>
+  );
+}
+
 export default function CompressPdfPage() {
   usePageTitle("Compress PDF");
   const vm = useCompressPdf();
 
   return (
     <ToolLayout toolName="Compress PDF">
+      <style>{`
+        .compress-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 24px;
+          align-items: start;
+        }
+        @media (max-width: 768px) {
+          .compress-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+
       <div className="tool-header">
         <h1>🗜️ Compress PDF</h1>
         <p>
@@ -60,14 +101,7 @@ export default function CompressPdfPage() {
       )}
 
       {vm.status === "idle" && vm.pendingFile && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 24,
-            alignItems: "start",
-          }}
-        >
+        <div className="compress-grid">
           {/* Config */}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div className="file-info-strip">
@@ -86,7 +120,10 @@ export default function CompressPdfPage() {
                 {LEVELS.map(({ value, label, desc, icon }) => (
                   <label
                     key={value}
-                    className={`radio-option${vm.level === value ? " selected" : ""}`}
+                    className={`radio-option${
+                      vm.level === value ? " selected" : ""
+                    }`}
+                    title={LEVEL_TOOLTIPS[value]}
                   >
                     <input
                       type="radio"
@@ -109,11 +146,17 @@ export default function CompressPdfPage() {
                       <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
                         {desc}
                       </div>
+                      <QualityDots level={value} />
                     </div>
                   </label>
                 ))}
               </div>
             </div>
+
+            <CompressionSizeEstimate
+              inputBytes={vm.pendingFile.size}
+              level={vm.level}
+            />
 
             <div style={{ display: "flex", gap: 10 }}>
               <button
@@ -178,31 +221,37 @@ export default function CompressPdfPage() {
             </div>
           )}
           {vm.stats && !vm.noReduction && (
-            <div className="stats-card" style={{ marginTop: 16 }}>
-              <div className="stat-item">
-                <div className="stat-label">Original</div>
-                <div className="stat-value">
-                  {(vm.stats.original / 1024 / 1024).toFixed(2)}
-                  <span style={{ fontSize: 12, fontWeight: 400 }}> MB</span>
+            <>
+              <div className="stats-card" style={{ marginTop: 16 }}>
+                <div className="stat-item">
+                  <div className="stat-label">Original</div>
+                  <div className="stat-value">
+                    {(vm.stats.original / 1024 / 1024).toFixed(2)}
+                    <span style={{ fontSize: 12, fontWeight: 400 }}> MB</span>
+                  </div>
+                </div>
+                <div className="stat-item">
+                  <div className="stat-label">Compressed</div>
+                  <div className="stat-value">
+                    {(vm.stats.compressed / 1024 / 1024).toFixed(2)}
+                    <span style={{ fontSize: 12, fontWeight: 400 }}> MB</span>
+                  </div>
+                </div>
+                <div className="stat-item">
+                  <div className="stat-label">Reduction</div>
+                  <div className="stat-value green">
+                    {formatCompressionStats(
+                      vm.stats.original,
+                      vm.stats.compressed,
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="stat-item">
-                <div className="stat-label">Compressed</div>
-                <div className="stat-value">
-                  {(vm.stats.compressed / 1024 / 1024).toFixed(2)}
-                  <span style={{ fontSize: 12, fontWeight: 400 }}> MB</span>
-                </div>
-              </div>
-              <div className="stat-item">
-                <div className="stat-label">Reduction</div>
-                <div className="stat-value green">
-                  {formatCompressionStats(
-                    vm.stats.original,
-                    vm.stats.compressed,
-                  )}
-                </div>
-              </div>
-            </div>
+              <BeforeAfterBar
+                originalBytes={vm.stats.original}
+                compressedBytes={vm.stats.compressed}
+              />
+            </>
           )}
           <PrivacyShield
             variant="card"

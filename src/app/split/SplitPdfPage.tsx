@@ -2,8 +2,10 @@ import { ToolLayout } from "@/components/ToolLayout/ToolLayout";
 import { FileDropZone } from "@/components/FileDropZone/FileDropZone";
 import { ProgressPanel } from "@/components/ProgressPanel/ProgressPanel";
 import { PrivacyShield } from "@/components/PrivacyShield/PrivacyShield";
+import { PageRangeChips } from "@/components/PageRangeChips/PageRangeChips";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useAuroraStore } from "@/stores/aurora.store";
+import { parseRange } from "@/lib/range-parser";
 import { useSplitPdf } from "./hooks/useSplitPdf";
 
 const PDF_ACCEPT = [{ mime: "application/pdf", extension: ".pdf" }];
@@ -12,12 +14,28 @@ export default function SplitPdfPage() {
   usePageTitle("Split PDF");
   const vm = useSplitPdf();
 
+  const selectedCount =
+    vm.rangeInput.trim() && !vm.rangeError
+      ? parseRange(vm.rangeInput, vm.pageCount).length
+      : 0;
+
+  const splitLabel =
+    selectedCount > 0 ? `Split PDF — ${selectedCount} pages` : "Split PDF";
+
   return (
     <ToolLayout toolName="Split PDF">
       <div className="tool-header">
         <h1>✂️ Split PDF</h1>
         <p>Extract specific pages from a PDF into a new, smaller file.</p>
       </div>
+
+      <style>{`
+        .split-range-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        @media (max-width: 600px) {
+          .split-range-row { flex-direction: column; }
+          .split-range-row .input-field { max-width: 100% !important; }
+        }
+      `}</style>
 
       {!vm.pdfFile && vm.status === "idle" && (
         <FileDropZone
@@ -44,7 +62,7 @@ export default function SplitPdfPage() {
             <label className="label" htmlFor="range-input">
               Page range (e.g. 1-3, 5, 7-9)
             </label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div className="split-range-row">
               <input
                 id="range-input"
                 className="input-field"
@@ -74,6 +92,7 @@ export default function SplitPdfPage() {
                 + Add Range
               </button>
             </div>
+            <PageRangeChips rangeStr={vm.rangeInput} pageCount={vm.pageCount} />
             {vm.rangeError && (
               <p
                 style={{ color: "var(--red)", fontSize: 12, marginTop: 4 }}
@@ -125,7 +144,7 @@ export default function SplitPdfPage() {
               disabled={!vm.canSplit}
               aria-label="Split PDF"
             >
-              Split PDF
+              {splitLabel}
             </button>
             <button className="btn btn-secondary" onClick={vm.handleReset}>
               Change file

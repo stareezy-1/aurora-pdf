@@ -5,6 +5,8 @@ import type {
   TextAnnotation,
   OcrPageResult,
   ShapeAnnotation,
+  OcrWord,
+  SearchablePdfPage,
 } from "@/types/engine.types";
 import type {
   CompressionLevel,
@@ -995,4 +997,77 @@ function _encryptRC4_40(
   final.set(encObjBytes, encPdf.length);
   final.set(newXref, encPdf.length + encObjBytes.length);
   return final;
+}
+
+// ---------------------------------------------------------------------------
+// buildSearchablePdf — embed OCR text layer over scanned page images
+// ---------------------------------------------------------------------------
+
+export async function buildSearchablePdf(
+  pages: SearchablePdfPage[],
+  onProgress: ProgressCallback,
+): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+  const sorted = [...pages].sort((a, b) => a.pageIndex - b.pageIndex);
+
+  for (let i = 0; i < sorted.length; i++) {
+    const p = sorted[i];
+
+    // Decode JPEG data URL and embed as image
+    const base64 = p.imageDataUrl.split(",")[1];
+    const imgBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const jpegImage = await pdfDoc.embedJpg(imgBytes);
+
+    // Use 72 DPI so 1px = 1pt
+    const pageWidth = p.imageWidth;
+    const pageHeight = p.imageHeight;
+
+    const page = pdfDoc.addPage([pageWidth, pageHeight]);
+
+    // Draw JPEG as full-page visual layer
+    page.drawImage(jpegImage, {
+      x: 0,
+      y: 0,
+      width: pageWidth,
+      height: pageHeight,
+    });
+
+    // Draw invisible text layer for each OCR word
+    for (const word of p.words) {
+      const pdfX = (word.bbox.x0 / p.imageWidth) * pageWidth;
+      const pdfY = (1 - word.bbox.y1 / p.imageHeight) * pageHeight;
+      const fontSize = Math.max(
+        6,
+        Math.round(
+          ((word.bbox.y1 - word.bbox.y0) / p.imageHeight) * pageHeight,
+        ),
+      );
+
+      // Replace non-latin1 characters with space (pdf-lib standard fonts are latin-1 only)
+      const safeText = word.text.replace(/[^\x20-\xFF]/g, " ").trim();
+      if (!safeText) continue;
+
+      try {
+        page.drawText(safeText, {
+          x: pdfX,
+          y: pdfY,
+          size: fontSize,
+          font,
+          color: rgb(0, 0, 0),
+          opacity: 0.001,
+        });
+      } catch {
+        // Skip words that can't be encoded
+      }
+    }
+
+    onProgress(
+      Math.round(((i + 1) / sorted.length) * 100),
+      `Assembling page ${i + 1} of ${sorted.length}…`,
+    );
+  }
+
+  return pdfDoc.save();
 }

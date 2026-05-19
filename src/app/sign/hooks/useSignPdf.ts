@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useFileProcessor } from "@/hooks/useFileProcessor";
 import { useAuroraStore } from "@/stores/aurora.store";
 import {
@@ -11,6 +11,14 @@ import { SignatureImageTooLargeError } from "@/lib/errors";
 import type { SignatureMethod } from "@/types/tool.types";
 
 const MAX_SIG_MB = 5;
+const SAVED_SIG_KEY = "aurora-saved-signature";
+
+export const SIGNATURE_FONTS = [
+  "Dancing Script",
+  "Pacifico",
+  "Great Vibes",
+] as const;
+export type SignatureFont = (typeof SIGNATURE_FONTS)[number];
 
 export interface SigOverlay {
   x: number;
@@ -38,7 +46,8 @@ export function useSignPdf() {
   const [method, setMethod] = useState<SignatureMethod>("draw");
   const [sigDataUrl, setSigDataUrl] = useState<string | null>(null);
   const [typedName, setTypedName] = useState("");
-  const [typedSigFont, setTypedSigFont] = useState("Georgia");
+  const [typedSigFont, setTypedSigFont] =
+    useState<SignatureFont>("Dancing Script");
   const [typedSigSize, setTypedSigSize] = useState(38);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -50,6 +59,32 @@ export function useSignPdf() {
   });
   const overlayDragOriginRef = useRef<{ x: number; y: number } | null>(null);
   const overlayResizeOriginRef = useRef<{ w: number; h: number } | null>(null);
+
+  // ── Saved signature (localStorage) ──────────────────────────────────────
+  const [savedSigDataUrl, setSavedSigDataUrl] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(SAVED_SIG_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  // Persist saved signature when a draw-mode signature is successfully applied
+  const persistSavedSignature = useCallback((dataUrl: string) => {
+    try {
+      localStorage.setItem(SAVED_SIG_KEY, dataUrl);
+      setSavedSigDataUrl(dataUrl);
+    } catch {
+      // localStorage may be unavailable in some environments
+    }
+  }, []);
+
+  // Load the saved signature as the active signature
+  const loadSavedSignature = useCallback(() => {
+    if (savedSigDataUrl) {
+      setSigDataUrl(savedSigDataUrl);
+    }
+  }, [savedSigDataUrl]);
 
   const processor = useFileProcessor({
     process: async (file, onProgress) => {
@@ -78,6 +113,10 @@ export function useSignPdf() {
         height: (overlay.height * scaleY) / imgH,
       });
       onProgress(100);
+      // Save drawn/typed signature to localStorage for future reuse
+      if (method === "draw" || method === "type") {
+        persistSavedSignature(sigDataUrl);
+      }
       return {
         blob: new Blob([result as any], { type: "application/pdf" }),
         filename: buildOutputFilename(file.name, "sign"),
@@ -130,11 +169,21 @@ export function useSignPdf() {
     if (!canvas || !typedName) return;
     const ctx = canvas.getContext("2d")!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = `${typedSigSize}px ${typedSigFont}, serif`;
+    ctx.font = `${typedSigSize}px "${typedSigFont}", cursive`;
     ctx.fillStyle = "#1a1a2e";
     ctx.fillText(typedName, 12, 56);
     setSigDataUrl(canvas.toDataURL("image/png"));
   }
+
+  // Re-render typed signature when font or name changes
+  useEffect(() => {
+    if (method === "type" && typedName) {
+      // Small delay to allow font to load
+      const timer = setTimeout(renderTypedSig, 50);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typedSigFont, typedName, method]);
 
   function handleSigImageDrop(files: File[]) {
     const file = files[0];
@@ -252,5 +301,7 @@ export function useSignPdf() {
     endOverlayResize,
     handleReset,
     MAX_SIG_MB,
+    savedSigDataUrl,
+    loadSavedSignature,
   };
 }

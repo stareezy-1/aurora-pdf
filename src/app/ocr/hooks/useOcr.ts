@@ -16,11 +16,14 @@ export function useOcr() {
   } = useAuroraStore();
 
   const [language, setLanguage] = useState("eng");
+  const [langSearch, setLangSearch] = useState("");
+  const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [blankPages, setBlankPages] = useState<string[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [extractedText, setExtractedText] = useState<string>("");
   const [pdfPreviews, setPdfPreviews] = useState<string[]>([]);
+  const [confidenceScores, setConfidenceScores] = useState<number[]>([]);
   const [copied, setCopied] = useState(false);
   const languages = getSupportedLanguages();
 
@@ -31,6 +34,12 @@ export function useOcr() {
         .filter((r) => !r.text.trim())
         .map((r) => files[r.imageIndex]?.name ?? `Image ${r.imageIndex + 1}`);
       setBlankPages(blanks);
+
+      // Capture confidence scores per image
+      const scores = results
+        .sort((a, b) => a.imageIndex - b.imageIndex)
+        .map((r) => r.confidence ?? 0);
+      setConfidenceScores(scores);
 
       // Capture all extracted text for the preview panel
       const allText = results
@@ -82,7 +91,10 @@ export function useOcr() {
     setBlankPages([]);
     setExtractedText("");
     setPdfPreviews([]);
+    setConfidenceScores([]);
     setCopied(false);
+    setLangSearch("");
+    setLangDropdownOpen(false);
   }
 
   async function handleCopyText() {
@@ -106,12 +118,17 @@ export function useOcr() {
     clearWorkbox,
     language,
     setLanguage,
+    langSearch,
+    setLangSearch,
+    langDropdownOpen,
+    setLangDropdownOpen,
     files,
     setFiles,
     imagePreviews,
     blankPages,
     extractedText,
     pdfPreviews,
+    confidenceScores,
     copied,
     languages,
     processor,

@@ -280,11 +280,13 @@ function PendingShapeOverlay({ vm }: { vm: EditPdfVm }) {
 interface OverlayItemProps {
   ov: Overlay;
   isSelected: boolean;
+  isInMultiSelect: boolean;
   wmText: string;
   wmOpacity: number;
   wmRotation: number;
-  onSelect: (id: string) => void;
-  onDragStart: (id: string) => void;
+  zoom: number;
+  onSelect: (id: string, shiftKey: boolean) => void;
+  onDragStart: (id: string, shiftKey?: boolean) => void;
   onDragMove: (id: string, dx: number, dy: number) => void;
   onDragEnd: () => void;
   onResizeStart: (id: string) => void;
@@ -295,9 +297,11 @@ interface OverlayItemProps {
 function OverlayItem({
   ov,
   isSelected,
+  isInMultiSelect,
   wmText,
   wmOpacity,
   wmRotation,
+  zoom,
   onSelect,
   onDragStart,
   onDragMove,
@@ -307,43 +311,72 @@ function OverlayItem({
   onResizeEnd,
 }: OverlayItemProps) {
   const dragHandlers = useDragOverlay({
-    onDrag: ({ dx, dy }) => onDragMove(ov.id, dx, dy),
+    onDrag: ({ dx, dy }) => onDragMove(ov.id, dx / zoom, dy / zoom),
     onDragEnd,
   });
 
   const resizeHandlers = useDragOverlay({
-    onDrag: ({ dx, dy }) => onResizeMove(ov.id, dx, dy),
+    onDrag: ({ dx, dy }) => onResizeMove(ov.id, dx / zoom, dy / zoom),
     onDragEnd: onResizeEnd,
   });
 
+  // Touch drag handlers (task 15.8)
+  const touchDragOriginRef = React.useRef<{
+    startX: number;
+    startY: number;
+  } | null>(null);
+
+  const handleTouchStartOverlay = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    const t = e.touches[0];
+    touchDragOriginRef.current = { startX: t.clientX, startY: t.clientY };
+    onDragStart(ov.id);
+  };
+
+  const handleTouchMoveOverlay = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (!touchDragOriginRef.current) return;
+    const t = e.touches[0];
+    const dx = (t.clientX - touchDragOriginRef.current.startX) / zoom;
+    const dy = (t.clientY - touchDragOriginRef.current.startY) / zoom;
+    onDragMove(ov.id, dx, dy);
+  };
+
+  const handleTouchEndOverlay = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    touchDragOriginRef.current = null;
+    onDragEnd();
+  };
+
+  const highlighted = isSelected || isInMultiSelect;
+
   return (
     <div
-      className={`editor-overlay-item${isSelected ? " selected" : ""}`}
+      className={`editor-overlay-item${highlighted ? " selected" : ""}`}
       style={{
-        left: ov.x,
-        top: ov.y,
-        width: ov.width,
-        height: ov.height,
+        left: ov.x * zoom,
+        top: ov.y * zoom,
+        width: ov.width * zoom,
+        height: ov.height * zoom,
+        touchAction: "none",
       }}
       onMouseDown={(e) => {
         e.stopPropagation();
-        onDragStart(ov.id);
-        dragHandlers.onMouseDown(e);
+        onDragStart(ov.id, e.shiftKey);
+        if (!e.shiftKey) dragHandlers.onMouseDown(e);
       }}
-      onTouchStart={(e) => {
-        e.stopPropagation();
-        onDragStart(ov.id);
-        dragHandlers.onTouchStart(e);
-      }}
+      onTouchStart={handleTouchStartOverlay}
+      onTouchMove={handleTouchMoveOverlay}
+      onTouchEnd={handleTouchEndOverlay}
       onClick={(e) => {
         e.stopPropagation();
-        onSelect(ov.id);
+        onSelect(ov.id, e.shiftKey);
       }}
     >
       {ov.type === "text" && (
         <span
           style={{
-            fontSize: ov.fontSize,
+            fontSize: (ov.fontSize ?? 18) * zoom,
             color: ov.color,
             fontFamily: ov.fontFamily ?? "Helvetica",
             opacity: ov.text === wmText ? wmOpacity / 100 : 1,
@@ -395,6 +428,21 @@ export default function EditPdfPage() {
   usePageTitle("Edit PDF");
   const vm = useEditPdf();
 
+  // Close context menu on outside click or Escape
+  React.useEffect(() => {
+    if (!vm.contextMenuPos) return;
+    const handleClick = () => vm.setContextMenuPos(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") vm.setContextMenuPos(null);
+    };
+    window.addEventListener("click", handleClick);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("click", handleClick);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [vm.contextMenuPos, vm.setContextMenuPos]);
+
   if (!vm.pdfBytes || vm.status !== "idle") {
     return (
       <ToolLayout toolName="Edit PDF">
@@ -438,7 +486,32 @@ export default function EditPdfPage() {
     <ToolLayout toolName="Edit PDF" wide>
       <div className="editor-shell">
         {/* ── Sidebar ── */}
-        <aside className="editor-sidebar">
+        <aside
+          className="editor-sidebar"
+          style={{
+            width: vm.sidebarWidth,
+            flexShrink: 0,
+            position: "relative",
+          }}
+        >
+          {/* Sidebar resize handle (task 15.5) */}
+          <div
+            aria-label="Resize sidebar"
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              width: 5,
+              height: "100%",
+              cursor: "col-resize",
+              zIndex: 10,
+              background: "transparent",
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              vm.beginSidebarResize();
+            }}
+          />
           <div className="editor-sidebar-header">
             ✏️ Edit PDF
             {vm.originalFile && (
@@ -1298,6 +1371,8 @@ export default function EditPdfPage() {
                       vm.setDragOver(null);
                     }}
                     onClick={() => vm.setCurrentPage(i)}
+                    onMouseEnter={() => vm.handleThumbMouseEnter(i)}
+                    onMouseLeave={vm.handleThumbMouseLeave}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1316,6 +1391,7 @@ export default function EditPdfPage() {
                       outline:
                         vm.dragOver === i ? "2px solid var(--green)" : "none",
                       transition: "all 0.15s",
+                      position: "relative",
                     }}
                     aria-label={`Page ${i + 1}`}
                   >
@@ -1353,6 +1429,45 @@ export default function EditPdfPage() {
                     >
                       ✕
                     </button>
+                    {/* Thumbnail hover preview tooltip (task 15.8) */}
+                    {vm.hoveredThumbIndex === i && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: "calc(100% + 8px)",
+                          top: 0,
+                          zIndex: 100,
+                          background: "var(--surface-1)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-md)",
+                          padding: 6,
+                          boxShadow: "var(--shadow-lg)",
+                          pointerEvents: "none",
+                        }}
+                      >
+                        <img
+                          src={src}
+                          alt={`Page ${i + 1} preview`}
+                          style={{
+                            width: 140,
+                            height: "auto",
+                            display: "block",
+                            borderRadius: 2,
+                            background: "#fff",
+                          }}
+                        />
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "var(--text-muted)",
+                            textAlign: "center",
+                            marginTop: 4,
+                          }}
+                        >
+                          Page {i + 1}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1381,13 +1496,40 @@ export default function EditPdfPage() {
                 </div>
               </div>
             )}
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={vm.handleUndo}
-              disabled={vm.snapshots.length === 0}
-            >
-              ↩ Undo ({vm.snapshots.length})
-            </button>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={vm.handleUndo}
+                disabled={
+                  vm.overlayUndoCount === 0 && vm.snapshots.length === 0
+                }
+                title={
+                  vm.overlayUndoCount > 0
+                    ? `Undo overlay change (${vm.overlayUndoCount} available)`
+                    : vm.snapshots.length > 0
+                    ? `Undo PDF change (${vm.snapshots.length} available)`
+                    : "Nothing to undo"
+                }
+                aria-label="Undo"
+              >
+                ↩ Undo
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() =>
+                  window.dispatchEvent(new CustomEvent("aurora:redo"))
+                }
+                disabled={vm.overlayRedoCount === 0}
+                title={
+                  vm.overlayRedoCount > 0
+                    ? `Redo overlay change (${vm.overlayRedoCount} available)`
+                    : "Nothing to redo"
+                }
+                aria-label="Redo"
+              >
+                ↪ Redo
+              </button>
+            </div>
             <button
               className="btn btn-primary"
               onClick={vm.handleExport}
@@ -1407,9 +1549,36 @@ export default function EditPdfPage() {
         {/* ── Canvas area ── */}
         <div className="editor-canvas">
           <div className="editor-canvas-toolbar">
+            {/* Page number display (task 15.8) */}
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
               Page {vm.currentPage + 1} of {vm.thumbnails.length}
             </span>
+            {/* Zoom selector (task 15.4) */}
+            <select
+              value={vm.zoom}
+              onChange={(e) =>
+                vm.setZoom(
+                  Number(e.target.value) as 0.5 | 0.75 | 1 | 1.25 | 1.5,
+                )
+              }
+              aria-label="Zoom level"
+              style={{
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text-1)",
+                fontSize: 12,
+                padding: "3px 6px",
+                cursor: "pointer",
+                fontFamily: "var(--font)",
+              }}
+            >
+              <option value={0.5}>50%</option>
+              <option value={0.75}>75%</option>
+              <option value={1}>100%</option>
+              <option value={1.25}>125%</option>
+              <option value={1.5}>150%</option>
+            </select>
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
               {TOOL_BUTTONS.map(({ id, icon }) => (
                 <button
@@ -1433,8 +1602,17 @@ export default function EditPdfPage() {
               style={{
                 cursor: vm.activeTool === "select" ? "default" : "crosshair",
                 position: "relative",
+                // Zoom transform (task 15.4) — applied to the canvas container
+                transform: `scale(${vm.zoom})`,
+                transformOrigin: "top center",
+                transition: "transform 200ms var(--ease-inout, ease)",
               }}
               onClick={vm.handleCanvasClick}
+              onContextMenu={(e) => {
+                // Right-click context menu (task 15.7)
+                e.preventDefault();
+                vm.setContextMenuPos({ x: e.clientX, y: e.clientY });
+              }}
             >
               <img
                 src={vm.pagePreviews[vm.currentPage]}
@@ -1442,6 +1620,39 @@ export default function EditPdfPage() {
                 style={{ display: "block", maxWidth: "min(860px, 100%)" }}
                 draggable={false}
               />
+
+              {/* Snap-to-grid overlay (task 15.2) — shown during drag */}
+              {vm.isDraggingOverlay && (
+                <svg
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    pointerEvents: "none",
+                    opacity: 0.15,
+                    zIndex: 5,
+                  }}
+                  aria-hidden="true"
+                >
+                  <defs>
+                    <pattern
+                      id="grid10"
+                      width="10"
+                      height="10"
+                      patternUnits="userSpaceOnUse"
+                    >
+                      <path
+                        d="M 10 0 L 0 0 0 10"
+                        fill="none"
+                        stroke="var(--green, #00ff88)"
+                        strokeWidth="0.5"
+                      />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid10)" />
+                </svg>
+              )}
 
               {/* Draw canvas overlay — transparent, sits on top of page image */}
               {vm.activeTool === "draw" && <DrawCanvas vm={vm} />}
@@ -1457,10 +1668,24 @@ export default function EditPdfPage() {
                   key={ov.id}
                   ov={ov}
                   isSelected={vm.selectedId === ov.id}
+                  isInMultiSelect={vm.selectedIds.has(ov.id)}
                   wmText={vm.wmText}
                   wmOpacity={vm.wmOpacity}
                   wmRotation={vm.wmRotation}
-                  onSelect={vm.setSelectedId}
+                  zoom={vm.zoom}
+                  onSelect={(id, shiftKey) => {
+                    if (shiftKey) {
+                      vm.setSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(id)) next.delete(id);
+                        else next.add(id);
+                        return next;
+                      });
+                    } else {
+                      vm.setSelectedId(id);
+                      vm.setSelectedIds(new Set([id]));
+                    }
+                  }}
                   onDragStart={vm.beginOverlayDrag}
                   onDragMove={vm.moveOverlayDrag}
                   onDragEnd={vm.endOverlayDrag}
@@ -1469,6 +1694,61 @@ export default function EditPdfPage() {
                   onResizeEnd={vm.endOverlayResize}
                 />
               ))}
+
+              {/* Contextual inline toolbar (task 15.6) */}
+              {vm.selectedId &&
+                (() => {
+                  const ov = vm.currentOverlays.find(
+                    (o) => o.id === vm.selectedId,
+                  );
+                  if (!ov) return null;
+                  return (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: ov.x * vm.zoom,
+                        top: Math.max(0, ov.y * vm.zoom - 36),
+                        display: "flex",
+                        gap: 4,
+                        background: "var(--surface-1)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-sm)",
+                        padding: "3px 6px",
+                        zIndex: 30,
+                        boxShadow: "var(--shadow-md)",
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => vm.deleteOverlay(vm.selectedId!)}
+                        title="Delete"
+                        aria-label="Delete overlay"
+                        style={{ fontSize: 11, padding: "2px 6px" }}
+                      >
+                        🗑
+                      </button>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => vm.duplicateOverlay(vm.selectedId!)}
+                        title="Duplicate"
+                        aria-label="Duplicate overlay"
+                        style={{ fontSize: 11, padding: "2px 6px" }}
+                      >
+                        ⧉
+                      </button>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => vm.bringOverlayToFront(vm.selectedId!)}
+                        title="Bring to front"
+                        aria-label="Bring overlay to front"
+                        style={{ fontSize: 11, padding: "2px 6px" }}
+                      >
+                        ↑
+                      </button>
+                    </div>
+                  );
+                })()}
 
               {/* OCR word bounding box highlights */}
               {vm.activeTool === "ocr-edit" &&
@@ -1528,6 +1808,72 @@ export default function EditPdfPage() {
                 ? "Loading pages…"
                 : "Select a page from the sidebar"}
             </div>
+          )}
+
+          {/* Right-click context menu (task 15.7) */}
+          {vm.contextMenuPos && (
+            <menu
+              style={{
+                position: "fixed",
+                left: vm.contextMenuPos.x,
+                top: vm.contextMenuPos.y,
+                margin: 0,
+                padding: "4px 0",
+                background: "var(--surface-1)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-md)",
+                boxShadow: "var(--shadow-lg)",
+                zIndex: 200,
+                listStyle: "none",
+                minWidth: 160,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <li>
+                <button
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    padding: "7px 14px",
+                    fontSize: 13,
+                    color: "var(--text-1)",
+                    cursor: "pointer",
+                    fontFamily: "var(--font)",
+                  }}
+                  onClick={() => {
+                    vm.selectAllOverlays();
+                    vm.setContextMenuPos(null);
+                  }}
+                >
+                  Select All
+                </button>
+              </li>
+              <li>
+                <button
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    padding: "7px 14px",
+                    fontSize: 13,
+                    color: "var(--text-1)",
+                    cursor: "pointer",
+                    fontFamily: "var(--font)",
+                  }}
+                  onClick={() => {
+                    vm.clearCanvasOverlays();
+                    vm.setContextMenuPos(null);
+                  }}
+                >
+                  Clear Canvas
+                </button>
+              </li>
+            </menu>
           )}
         </div>
       </div>

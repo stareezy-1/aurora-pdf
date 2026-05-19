@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { ToolLayout } from "@/components/ToolLayout/ToolLayout";
 import { FileDropZone } from "@/components/FileDropZone/FileDropZone";
 import { ProgressPanel } from "@/components/ProgressPanel/ProgressPanel";
@@ -5,9 +6,23 @@ import { PrivacyShield } from "@/components/PrivacyShield/PrivacyShield";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useAuroraStore } from "@/stores/aurora.store";
 import { useDragOverlay } from "@/hooks/useDragOverlay";
-import { useSignPdf } from "./hooks/useSignPdf";
+import { useSignPdf, SIGNATURE_FONTS } from "./hooks/useSignPdf";
 import type { SignatureMethod } from "@/types/tool.types";
 import type { SigOverlay } from "./hooks/useSignPdf";
+
+// Load Google Fonts for signature type mode
+const GOOGLE_FONTS_URL =
+  "https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Pacifico&family=Great+Vibes&display=swap";
+
+function useGoogleFonts() {
+  useEffect(() => {
+    if (document.querySelector(`link[href="${GOOGLE_FONTS_URL}"]`)) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = GOOGLE_FONTS_URL;
+    document.head.appendChild(link);
+  }, []);
+}
 
 const PDF_ACCEPT = [{ mime: "application/pdf", extension: ".pdf" }];
 const SIG_IMG_ACCEPT = [
@@ -104,6 +119,7 @@ function SignatureOverlay({
 
 export default function SignPdfPage() {
   usePageTitle("Sign PDF");
+  useGoogleFonts();
   const vm = useSignPdf();
 
   if (!vm.pdfFile || vm.status !== "idle") {
@@ -232,58 +248,6 @@ export default function SignPdfPage() {
                   style={{ display: "none" }}
                   aria-hidden="true"
                 />
-                <div>
-                  <label className="label" htmlFor="sig-font-family">
-                    Font family
-                  </label>
-                  <select
-                    id="sig-font-family"
-                    className="select-field"
-                    value={vm.typedSigFont}
-                    onChange={(e) => {
-                      vm.setTypedSigFont(e.target.value);
-                      if (vm.typedName) setTimeout(vm.renderTypedSig, 0);
-                    }}
-                    aria-label="Signature font family"
-                  >
-                    {[
-                      "Helvetica",
-                      "Times New Roman",
-                      "Courier",
-                      "Georgia",
-                      "Verdana",
-                      "Arial",
-                      "Trebuchet MS",
-                      "Palatino",
-                      "Garamond",
-                      "Bookman",
-                      "Comic Sans MS",
-                      "Impact",
-                    ].map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="sig-font-size">
-                    Font size: {vm.typedSigSize}pt
-                  </label>
-                  <input
-                    id="sig-font-size"
-                    type="range"
-                    className="slider-field"
-                    min={8}
-                    max={144}
-                    value={vm.typedSigSize}
-                    onChange={(e) => {
-                      vm.setTypedSigSize(Number(e.target.value));
-                      if (vm.typedName) setTimeout(vm.renderTypedSig, 0);
-                    }}
-                    aria-label="Signature font size"
-                  />
-                </div>
                 <input
                   className="input-field"
                   value={vm.typedName}
@@ -291,17 +255,48 @@ export default function SignPdfPage() {
                   placeholder="Type your name…"
                   aria-label="Type your name"
                   style={{
-                    fontFamily: `${vm.typedSigFont}, serif`,
+                    fontFamily: `"${vm.typedSigFont}", cursive`,
                     fontSize: 20,
                   }}
                 />
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={vm.renderTypedSig}
-                  disabled={!vm.typedName}
-                >
-                  Preview signature
-                </button>
+                <div>
+                  <label className="label">Choose font</label>
+                  <div
+                    className="tab-group"
+                    style={{ flexDirection: "column", gap: 6 }}
+                  >
+                    {SIGNATURE_FONTS.map((font) => (
+                      <button
+                        key={font}
+                        className={`tab-btn${
+                          vm.typedSigFont === font ? " active" : ""
+                        }`}
+                        style={{
+                          fontFamily: `"${font}", cursive`,
+                          fontSize: 22,
+                          padding: "6px 12px",
+                          textAlign: "left",
+                        }}
+                        onClick={() => {
+                          vm.setTypedSigFont(font);
+                          if (vm.typedName) setTimeout(vm.renderTypedSig, 50);
+                        }}
+                        aria-pressed={vm.typedSigFont === font}
+                        aria-label={`Use ${font} font`}
+                      >
+                        {font}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {vm.typedName && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={vm.renderTypedSig}
+                  >
+                    Preview signature
+                  </button>
+                )}
               </div>
             )}
 
@@ -323,6 +318,35 @@ export default function SignPdfPage() {
                   onError={(msg) => useAuroraStore.getState().failSession(msg)}
                   aria-label="Upload signature image"
                 />
+              </div>
+            )}
+
+            {/* Use previous signature */}
+            {vm.savedSigDataUrl && !vm.sigDataUrl && (
+              <div
+                className="card-sm"
+                style={{ display: "flex", flexDirection: "column", gap: 8 }}
+              >
+                <div className="label">Previous signature</div>
+                <img
+                  src={vm.savedSigDataUrl}
+                  alt="Saved signature"
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: 50,
+                    background: "#fff",
+                    borderRadius: 4,
+                    padding: 4,
+                    objectFit: "contain",
+                  }}
+                />
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={vm.loadSavedSignature}
+                  aria-label="Use previous signature"
+                >
+                  Use previous signature
+                </button>
               </div>
             )}
 

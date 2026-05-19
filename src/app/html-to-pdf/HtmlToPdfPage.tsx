@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { ToolLayout } from "@/components/ToolLayout/ToolLayout";
 import { ProgressPanel } from "@/components/ProgressPanel/ProgressPanel";
 import { PrivacyShield } from "@/components/PrivacyShield/PrivacyShield";
+import { OfflineBanner } from "@/components/OfflineBanner/OfflineBanner";
+import { FileDropZone } from "@/components/FileDropZone/FileDropZone";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useAuroraStore } from "@/stores/aurora.store";
 import { useHtmlToPdf } from "./hooks/useHtmlToPdf";
 import type { PageSize, Orientation } from "@/types/tool.types";
 
@@ -14,8 +18,32 @@ const ORIENTATIONS: { value: Orientation; label: string; icon: string }[] = [
 export default function HtmlToPdfPage() {
   usePageTitle("HTML to PDF");
   const vm = useHtmlToPdf();
+  const isOnline = useAuroraStore((s) => s.isOnline);
   const busy = vm.isPending || vm.status === "processing";
-  const canConvert = !!vm.url && !vm.urlError && !busy;
+
+  // Input mode: 'url' or 'file'
+  const [inputMode, setInputMode] = useState<"url" | "file">("url");
+  // Preview URL — set on blur or Enter, cleared on reset
+  const [previewUrl, setPreviewUrl] = useState("");
+
+  const urlDisabled = !isOnline && inputMode === "url";
+  const canConvert = !!vm.url && !vm.urlError && !busy && !urlDisabled;
+
+  function handleUrlBlur() {
+    if (vm.url && !vm.urlError) setPreviewUrl(vm.url);
+  }
+
+  function handleUrlKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      if (vm.url && !vm.urlError) setPreviewUrl(vm.url);
+      if (canConvert) vm.handleConvert();
+    }
+  }
+
+  function handleReset() {
+    vm.handleReset();
+    setPreviewUrl("");
+  }
 
   return (
     <ToolLayout toolName="HTML to PDF">
@@ -27,69 +55,161 @@ export default function HtmlToPdfPage() {
         </p>
       </div>
 
-      {/* ── URL card ── */}
-      <div
-        style={{
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--radius-lg)",
-          padding: "20px 24px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-        }}
-      >
-        <label
-          htmlFor="html-url-input"
-          style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}
+      {/* ── Input mode tabs ── */}
+      <div className="tab-group" role="tablist" aria-label="Input mode">
+        <button
+          className={`tab-btn${inputMode === "url" ? " active" : ""}`}
+          role="tab"
+          aria-selected={inputMode === "url"}
+          onClick={() => setInputMode("url")}
         >
-          🔗 Webpage URL
-        </label>
-        <div style={{ display: "flex", gap: 10 }}>
-          <input
-            id="html-url-input"
-            type="url"
-            className="input-field"
-            placeholder="https://example.com"
-            value={vm.url}
-            onChange={(e) => vm.setUrl(e.target.value)}
-            onKeyDown={(e) =>
-              e.key === "Enter" && canConvert && vm.handleConvert()
-            }
-            aria-label="Enter an HTTPS URL to convert to PDF"
-            aria-invalid={!!vm.urlError}
-            disabled={busy}
-            style={{ flex: 1, fontSize: 15 }}
-          />
-          <button
-            className="btn btn-primary"
-            onClick={vm.handleConvert}
-            disabled={!canConvert}
-            aria-label="Convert to PDF"
-            style={{ flexShrink: 0, minWidth: 130 }}
+          🔗 URL
+        </button>
+        <button
+          className={`tab-btn${inputMode === "file" ? " active" : ""}`}
+          role="tab"
+          aria-selected={inputMode === "file"}
+          onClick={() => setInputMode("file")}
+        >
+          📄 File
+        </button>
+      </div>
+
+      {/* ── Offline banner ── */}
+      <OfflineBanner mode={inputMode} />
+
+      {/* ── URL card ── */}
+      {inputMode === "url" && (
+        <div
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-lg)",
+            padding: "20px 24px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          <label
+            htmlFor="html-url-input"
+            style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}
           >
-            {busy ? "Converting…" : "🌐 Convert"}
-          </button>
+            🔗 Webpage URL
+          </label>
+          <div style={{ display: "flex", gap: 10 }}>
+            <input
+              id="html-url-input"
+              type="url"
+              className="input-field"
+              placeholder="https://example.com"
+              value={vm.url}
+              onChange={(e) => vm.setUrl(e.target.value)}
+              onBlur={handleUrlBlur}
+              onKeyDown={handleUrlKeyDown}
+              aria-label="Enter an HTTPS URL to convert to PDF"
+              aria-invalid={!!vm.urlError}
+              disabled={busy || urlDisabled}
+              style={{
+                flex: 1,
+                fontSize: 15,
+                opacity: urlDisabled ? 0.5 : 1,
+                cursor: urlDisabled ? "not-allowed" : undefined,
+              }}
+            />
+            <button
+              className="btn btn-primary"
+              onClick={vm.handleConvert}
+              disabled={!canConvert}
+              aria-label="Convert to PDF"
+              style={{ flexShrink: 0, minWidth: 130 }}
+            >
+              {busy ? "Converting…" : "🌐 Convert"}
+            </button>
+          </div>
+          {vm.urlError && (
+            <div
+              role="alert"
+              style={{
+                fontSize: 12,
+                color: "var(--red, #ff4444)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              ⚠ {vm.urlError}
+            </div>
+          )}
+          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+            Only HTTPS URLs are supported. The page is fetched via a CORS proxy
+            and rendered locally.
+          </p>
+
+          {/* ── Sandboxed iframe preview ── */}
+          {previewUrl && isOnline && (
+            <div
+              style={{
+                marginTop: 8,
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-md)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  padding: "6px 12px",
+                  background: "var(--surface-2)",
+                  borderBottom: "1px solid var(--border)",
+                  fontSize: 11,
+                  color: "var(--text-muted)",
+                }}
+              >
+                Preview: {previewUrl}
+              </div>
+              <iframe
+                src={previewUrl}
+                sandbox="allow-scripts allow-same-origin"
+                title="URL preview"
+                style={{
+                  width: "100%",
+                  height: 320,
+                  border: "none",
+                  display: "block",
+                }}
+              />
+            </div>
+          )}
         </div>
-        {vm.urlError && (
-          <div
-            role="alert"
+      )}
+
+      {/* ── File mode ── */}
+      {inputMode === "file" && (
+        <div
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-lg)",
+            padding: "20px 24px",
+          }}
+        >
+          <FileDropZone
+            accept={[{ mime: "text/html", extension: ".html" }]}
+            onFilesAccepted={() => {}}
+            onError={() => {}}
+          />
+          <p
             style={{
               fontSize: 12,
-              color: "var(--red, #ff4444)",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
+              color: "var(--text-muted)",
+              marginTop: 12,
+              marginBottom: 0,
             }}
           >
-            ⚠ {vm.urlError}
-          </div>
-        )}
-        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
-          Only HTTPS URLs are supported. The page is fetched via a CORS proxy
-          and rendered locally.
-        </p>
-      </div>
+            Drop an HTML file to convert it to PDF locally.
+          </p>
+        </div>
+      )}
 
       {/* ── Settings card ── */}
       <div
@@ -267,7 +387,7 @@ export default function HtmlToPdfPage() {
         progress={vm.progress}
         label={vm.progressLabel}
         errorMessage={vm.errorMessage ?? undefined}
-        onRetry={vm.handleReset}
+        onRetry={handleReset}
       />
 
       {vm.status === "success" && (
@@ -277,7 +397,7 @@ export default function HtmlToPdfPage() {
           outputFilename={vm.outputFilename ?? undefined}
           blobUrl={vm.resultBlobUrl}
           onDownload={vm.clearWorkbox}
-          onReset={vm.handleReset}
+          onReset={handleReset}
         />
       )}
     </ToolLayout>

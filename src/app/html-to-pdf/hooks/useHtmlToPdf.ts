@@ -89,6 +89,13 @@ async function convertHtmlToPdf(
 ): Promise<Uint8Array> {
   onProgress(10, "Fetching page…");
 
+  // Check online status before attempting any network request
+  if (!navigator.onLine) {
+    throw new Error(
+      "No internet connection. Connect to the internet to convert URLs.",
+    );
+  }
+
   // Try multiple CORS proxies in order
   const proxies: Array<(u: string) => string> = [
     (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,

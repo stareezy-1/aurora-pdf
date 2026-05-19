@@ -4,6 +4,9 @@ import { NavBar } from "@/components/NavBar/NavBar";
 import { Footer } from "@/components/Footer/Footer";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { TOOL_DESCRIPTIONS } from "@/lib/format-utils";
+import { CategoryFilterBar } from "@/components/CategoryFilterBar/CategoryFilterBar";
+
+type ToolCategory = "All" | "Convert" | "Edit" | "Optimize" | "Security";
 
 // ── Tool registry ──────────────────────────────────────────────────────────
 
@@ -119,6 +122,14 @@ const TOOLS = [
     color: "#7c3aed",
     bg: "rgba(124,58,237,0.08)",
     category: "security",
+  },
+  {
+    path: "/searchable-pdf",
+    name: "Searchable PDF OCR",
+    icon: "🔎",
+    color: "#00ccff",
+    bg: "rgba(0,204,255,0.08)",
+    category: "convert",
   },
 ];
 
@@ -402,12 +413,21 @@ function FloatingPdfAsset() {
 export default function HomePage() {
   usePageTitle("Home");
   const location = useLocation();
+  const [activeCategory, setActiveCategory] = useState<ToolCategory>("All");
 
   return (
     <div
       className="page-wrap"
       style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}
     >
+      <style>{`
+        @media (max-width: 600px) {
+          .home-tool-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        @media (max-width: 480px) {
+          .stats-bar { overflow-x: auto; white-space: nowrap; }
+        }
+      `}</style>
       <NavBar currentPath={location.pathname} />
 
       <main style={{ flex: 1 }}>
@@ -533,7 +553,7 @@ export default function HomePage() {
                   maxWidth: 480,
                 }}
               >
-                14 powerful PDF utilities — compress, convert, edit, sign,
+                15 powerful PDF utilities — compress, convert, edit, sign,
                 watermark, split and more. Everything runs{" "}
                 <strong style={{ color: "var(--text)" }}>
                   100% in your browser
@@ -639,6 +659,7 @@ export default function HomePage() {
 
             {/* Right: visual asset */}
             <div
+              className="floating-pdf-asset"
               style={{
                 flex: "0 0 auto",
                 display: "flex",
@@ -660,6 +681,7 @@ export default function HomePage() {
           }}
         >
           <div
+            className="stats-bar"
             style={{
               maxWidth: 1100,
               margin: "0 auto",
@@ -670,7 +692,7 @@ export default function HomePage() {
             }}
           >
             {[
-              { value: 14, suffix: "", label: "PDF Tools" },
+              { value: 15, suffix: "", label: "PDF Tools" },
               { value: 100, suffix: "%", label: "Client-Side" },
               { value: 0, suffix: "", label: "Uploads" },
               { value: 0, suffix: "", label: "Accounts" },
@@ -829,7 +851,7 @@ export default function HomePage() {
                   marginBottom: 8,
                 }}
               >
-                14 tools. One place.
+                15 tools. One place.
               </h2>
               <p
                 style={{
@@ -840,101 +862,122 @@ export default function HomePage() {
                 }}
               >
                 Everything you need to work with PDFs — free, private, instant.
+                15 tools, zero uploads.
               </p>
             </div>
 
+            <div style={{ marginBottom: 20 }}>
+              <CategoryFilterBar
+                active={activeCategory}
+                onChange={setActiveCategory}
+              />
+            </div>
+
             <div
+              className="home-tool-grid"
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
                 gap: 14,
               }}
               role="list"
               aria-label="Available tools"
             >
-              {TOOLS.map(({ path, name, icon, color, bg }) => (
-                <Link
-                  key={path}
-                  to={path}
-                  role="listitem"
-                  aria-label={name}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 10,
-                    background: "var(--bg)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius-lg)",
-                    padding: 20,
-                    textDecoration: "none",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.borderColor = color;
-                    (e.currentTarget as HTMLElement).style.transform =
-                      "translateY(-2px)";
-                    (
-                      e.currentTarget as HTMLElement
-                    ).style.boxShadow = `0 8px 24px ${color}22`;
-                    (e.currentTarget as HTMLElement).style.background =
-                      "var(--surface)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.borderColor =
-                      "var(--border)";
-                    (e.currentTarget as HTMLElement).style.transform = "none";
-                    (e.currentTarget as HTMLElement).style.boxShadow = "none";
-                    (e.currentTarget as HTMLElement).style.background =
-                      "var(--bg)";
-                  }}
-                >
-                  <div
+              {TOOLS.map(({ path, name, icon, color, bg, category }) => {
+                const visible =
+                  activeCategory === "All" ||
+                  category === activeCategory.toLowerCase();
+                return (
+                  <Link
+                    key={path}
+                    to={path}
+                    role="listitem"
+                    aria-label={name}
                     style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: "var(--radius-md)",
-                      background: bg,
                       display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 22,
+                      flexDirection: "column",
+                      gap: 10,
+                      background: "var(--bg)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-lg)",
+                      padding: 20,
+                      textDecoration: "none",
+                      transition: "all 0.2s, opacity 0.2s, transform 0.2s",
+                      opacity: visible ? 1 : 0,
+                      transform: visible ? "scale(1)" : "scale(0.95)",
+                      pointerEvents: visible ? "auto" : "none",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!visible) return;
+                      (e.currentTarget as HTMLElement).style.borderColor =
+                        color;
+                      (e.currentTarget as HTMLElement).style.transform =
+                        "translateY(-2px)";
+                      (
+                        e.currentTarget as HTMLElement
+                      ).style.boxShadow = `0 8px 24px ${color}22`;
+                      (e.currentTarget as HTMLElement).style.background =
+                        "var(--surface)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.borderColor =
+                        "var(--border)";
+                      (e.currentTarget as HTMLElement).style.transform = visible
+                        ? "scale(1)"
+                        : "scale(0.95)";
+                      (e.currentTarget as HTMLElement).style.boxShadow = "none";
+                      (e.currentTarget as HTMLElement).style.background =
+                        "var(--bg)";
                     }}
                   >
-                    {icon}
-                  </div>
-                  <div>
                     <div
                       style={{
-                        fontSize: 14,
-                        fontWeight: 700,
-                        color: "var(--text)",
-                        marginBottom: 4,
+                        width: 44,
+                        height: 44,
+                        borderRadius: "var(--radius-md)",
+                        background: bg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 22,
                       }}
                     >
-                      {name}
+                      {icon}
+                    </div>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 700,
+                          color: "var(--text)",
+                          marginBottom: 4,
+                        }}
+                      >
+                        {name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "var(--text-muted)",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {TOOL_DESCRIPTIONS[name] ?? ""}
+                      </div>
                     </div>
                     <div
                       style={{
+                        marginTop: "auto",
                         fontSize: 12,
-                        color: "var(--text-muted)",
-                        lineHeight: 1.5,
+                        color,
+                        fontWeight: 600,
                       }}
                     >
-                      {TOOL_DESCRIPTIONS[name] ?? ""}
+                      Open tool →
                     </div>
-                  </div>
-                  <div
-                    style={{
-                      marginTop: "auto",
-                      fontSize: 12,
-                      color,
-                      fontWeight: 600,
-                    }}
-                  >
-                    Open tool →
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           </div>
         </section>

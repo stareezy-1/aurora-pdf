@@ -124,7 +124,11 @@ export async function recognizeAll(
 
       const processed = await preprocessImage(images[i]);
       const { data } = await worker.recognize(processed);
-      results.push({ text: data.text, imageIndex: i });
+      results.push({
+        text: data.text,
+        imageIndex: i,
+        confidence: data.confidence,
+      });
 
       onProgress(pct, `Processing image ${k} of ${n} — ${pct}%`);
     }
