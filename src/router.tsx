@@ -10,6 +10,7 @@ import { useSwUpdate } from "@/hooks/useSwUpdate";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useAuroraStore } from "@/stores/aurora.store";
+import { usePageAnalytics } from "@/hooks/usePageAnalytics";
 
 const HomePage = lazy(() => import("@/app/home/HomePage"));
 const CompressPdfPage = lazy(() => import("@/app/compress/CompressPdfPage"));
@@ -40,6 +41,7 @@ function RootLayout() {
   useSwUpdate();
   useCommandPalette();
   useKeyboardShortcuts();
+  usePageAnalytics(); // track page views on every route change
 
   // Read overlay state from store
   const commandPaletteOpen = useAuroraStore((s) => s.commandPaletteOpen);

@@ -29,6 +29,7 @@ export default function WordToPdfPage() {
           onFilesAccepted={(files) => vm.setPendingFile(files[0])}
           onError={vm.handleError}
           aria-label="Drop a .docx file to convert to PDF"
+          tool="word-to-pdf"
         />
       )}
 
@@ -72,6 +73,7 @@ export default function WordToPdfPage() {
           blobUrl={vm.resultBlobUrl}
           onDownload={vm.clearWorkbox}
           onReset={vm.handleReset}
+          tool="word-to-pdf"
         />
       )}
     </ToolLayout>

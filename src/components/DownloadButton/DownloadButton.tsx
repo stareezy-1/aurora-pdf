@@ -1,12 +1,14 @@
 import { useRef, useState } from "react";
 import { ClearModal } from "@/components/ClearModal/ClearModal";
 import type { DownloadButtonProps } from "./DownloadButton.types";
+import { trackEvent } from "@/lib/analytics";
 
 export function DownloadButton({
   blobUrl,
   filename,
   onDownloadComplete,
   disabled = false,
+  tool = "unknown",
 }: DownloadButtonProps) {
   const anchorRef = useRef<HTMLAnchorElement>(null);
   const [showModal, setShowModal] = useState(false);
@@ -14,10 +16,15 @@ export function DownloadButton({
 
   function handleClick() {
     if (!blobUrl || isDisabled) return;
-    // Trigger the actual browser download immediately
     anchorRef.current?.click();
-    // Show the animated modal
     setShowModal(true);
+
+    // Analytics: track download
+    trackEvent({
+      name: "file_downloaded",
+      tool,
+      outputSizeMb: 0, // size not available here; tracked in PrivacyShield
+    });
   }
 
   function handleModalComplete() {

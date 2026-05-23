@@ -41,6 +41,7 @@ export default function WatermarkPage() {
             onFilesAccepted={vm.handleFileDrop}
             onError={(msg) => useAuroraStore.getState().failSession(msg)}
             aria-label="Drop a PDF to watermark"
+            tool="watermark"
           />
         )}
         <ProgressPanel
@@ -58,6 +59,7 @@ export default function WatermarkPage() {
             blobUrl={vm.resultBlobUrl}
             onDownload={vm.handleReset}
             onReset={vm.handleReset}
+            tool="watermark"
           />
         )}
       </ToolLayout>
@@ -234,8 +236,8 @@ export default function WatermarkPage() {
                       {p === "diagonal"
                         ? "↗ Diagonal"
                         : p === "header"
-                        ? "⬆ Header"
-                        : "⬇ Footer"}
+                          ? "⬆ Header"
+                          : "⬇ Footer"}
                     </button>
                   ),
                 )}

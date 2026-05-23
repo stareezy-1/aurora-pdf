@@ -27,6 +27,7 @@ export default function PdfToWordPage() {
           onFilesAccepted={vm.handleFileDrop}
           onError={(msg) => useAuroraStore.getState().failSession(msg)}
           aria-label="Drop a PDF to convert to Word"
+          tool="pdf-to-word"
         />
       )}
 
@@ -99,6 +100,7 @@ export default function PdfToWordPage() {
           blobUrl={vm.resultBlobUrl}
           onDownload={vm.clearWorkbox}
           onReset={vm.handleReset}
+          tool="pdf-to-word"
         />
       )}
     </ToolLayout>

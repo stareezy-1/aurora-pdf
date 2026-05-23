@@ -8,4 +8,6 @@ export interface FileDropZoneProps {
   onError: (message: string) => void;
   disabled?: boolean;
   "aria-label"?: string;
+  /** Tool name for analytics (e.g. "compress", "ocr"). Defaults to "unknown". */
+  tool?: string;
 }

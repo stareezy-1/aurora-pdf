@@ -27,6 +27,7 @@ export default function PdfToJpgPage() {
             onFilesAccepted={([f]) => vm.processor.run(f)}
             onError={(msg) => useAuroraStore.getState().failSession(msg)}
             aria-label="Drop a PDF to convert to JPG"
+            tool="pdf-to-jpg"
           />
           <div style={{ marginTop: 20 }}>
             <label className="label">Output resolution</label>
@@ -61,6 +62,7 @@ export default function PdfToJpgPage() {
           blobUrl={vm.resultBlobUrl}
           onDownload={vm.clearWorkbox}
           onReset={vm.clearWorkbox}
+          tool="pdf-to-jpg"
         />
       )}
     </ToolLayout>

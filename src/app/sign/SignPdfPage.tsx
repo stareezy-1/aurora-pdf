@@ -135,6 +135,7 @@ export default function SignPdfPage() {
             onFilesAccepted={vm.handlePdfDrop}
             onError={(msg) => useAuroraStore.getState().failSession(msg)}
             aria-label="Drop a PDF to sign"
+            tool="sign"
           />
         )}
         <ProgressPanel
@@ -152,6 +153,7 @@ export default function SignPdfPage() {
             blobUrl={vm.resultBlobUrl}
             onDownload={vm.handleReset}
             onReset={vm.handleReset}
+            tool="sign"
           />
         )}
       </ToolLayout>

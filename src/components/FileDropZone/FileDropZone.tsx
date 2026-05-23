@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { validateFile } from "@/lib/file-validator";
 import type { FileDropZoneProps } from "./FileDropZone.types";
+import { trackEvent } from "@/lib/analytics";
 
 const isTouch = typeof window !== "undefined" && "ontouchstart" in window;
 
@@ -12,6 +13,7 @@ export function FileDropZone({
   onError,
   disabled = false,
   "aria-label": ariaLabel = "File drop zone",
+  tool = "unknown",
 }: FileDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [rejectedType, setRejectedType] = useState(false);
@@ -38,9 +40,17 @@ export function FileDropZone({
           return;
         }
       }
+      // Analytics: track file selection
+      const first = toProcess[0];
+      trackEvent({
+        name: "tool_file_selected",
+        tool,
+        fileSizeMb: parseFloat((first.size / 1024 / 1024).toFixed(2)),
+        fileType: first.type || "unknown",
+      });
       onFilesAccepted(toProcess);
     },
-    [accept, maxSizeMb, multiple, onFilesAccepted, onError],
+    [accept, maxSizeMb, multiple, onFilesAccepted, onError, tool],
   );
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -121,8 +131,8 @@ export function FileDropZone({
   const ctaText = isDragging
     ? "Drop to upload"
     : isTouch
-    ? "Tap to select a file"
-    : "Drag & drop or click to select";
+      ? "Tap to select a file"
+      : "Drag & drop or click to select";
 
   return (
     <div

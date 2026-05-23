@@ -7,6 +7,10 @@ import { router } from "./router";
 import { useAuroraStore } from "@/stores/aurora.store";
 import { ErrorBoundary } from "@/error/ErrorBoundary";
 import { Workbox } from "workbox-window";
+import { initAnalytics } from "@/lib/analytics";
+
+// Initialise Sentry / analytics as early as possible
+initAnalytics();
 
 // Register service worker via workbox-window (PWA)
 if ("serviceWorker" in navigator) {

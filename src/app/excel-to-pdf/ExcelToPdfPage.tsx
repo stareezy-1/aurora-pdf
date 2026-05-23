@@ -31,6 +31,7 @@ export default function ExcelToPdfPage() {
           onFilesAccepted={vm.handleFileDrop}
           onError={(msg) => useAuroraStore.getState().failSession(msg)}
           aria-label="Drop an Excel file to convert to PDF"
+          tool="excel-to-pdf"
         />
       )}
 
@@ -85,6 +86,7 @@ export default function ExcelToPdfPage() {
           blobUrl={vm.resultBlobUrl}
           onDownload={vm.clearWorkbox}
           onReset={vm.handleReset}
+          tool="excel-to-pdf"
         />
       )}
     </ToolLayout>

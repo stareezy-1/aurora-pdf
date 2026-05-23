@@ -55,6 +55,7 @@ export default function OrganizePdfPage() {
           onFilesAccepted={vm.handleFileDrop}
           onError={(msg) => useAuroraStore.getState().failSession(msg)}
           aria-label="Drop a PDF to organize"
+          tool="organize"
         />
       )}
 
@@ -232,13 +233,13 @@ export default function OrganizePdfPage() {
                       border: vm.selectedIds.has(idx)
                         ? "2px solid var(--green)"
                         : vm.dragOver === idx
-                        ? "2px solid var(--green)"
-                        : "1px solid var(--border)",
+                          ? "2px solid var(--green)"
+                          : "1px solid var(--border)",
                       background: vm.selectedIds.has(idx)
                         ? "rgba(0,255,136,0.08)"
                         : vm.dragSrc === idx
-                        ? "rgba(0,255,136,0.06)"
-                        : "var(--surface-2)",
+                          ? "rgba(0,255,136,0.06)"
+                          : "var(--surface-2)",
                       cursor: "grab",
                       transition: "border-color 0.15s, background 0.15s",
                       userSelect: "none",
@@ -473,6 +474,7 @@ export default function OrganizePdfPage() {
           blobUrl={vm.resultBlobUrl}
           onDownload={vm.clearWorkbox}
           onReset={vm.handleReset}
+          tool="organize"
         />
       )}
     </ToolLayout>

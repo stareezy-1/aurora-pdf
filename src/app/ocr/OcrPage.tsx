@@ -87,8 +87,8 @@ export default function OcrPage() {
   const displayValue = vm.langDropdownOpen
     ? vm.langSearch
     : selectedLang
-    ? `${getLangFlag(selectedLang.code)} ${selectedLang.label}`
-    : "";
+      ? `${getLangFlag(selectedLang.code)} ${selectedLang.label}`
+      : "";
 
   function handleSelectAll() {
     textAreaRef.current?.select();
@@ -161,6 +161,7 @@ export default function OcrPage() {
               onFilesAccepted={vm.handleFilesAccepted}
               onError={(msg) => useAuroraStore.getState().failSession(msg)}
               aria-label="Drop image files for OCR"
+              tool="ocr"
             />
           ) : (
             <>
@@ -532,6 +533,7 @@ export default function OcrPage() {
                   blobUrl={vm.resultBlobUrl}
                   filename={vm.outputFilename}
                   onDownloadComplete={vm.clearWorkbox}
+                  tool="ocr"
                 />
                 <button
                   className="btn btn-secondary"

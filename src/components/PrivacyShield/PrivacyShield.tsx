@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { DownloadButton } from "@/components/DownloadButton/DownloadButton";
 import type { PrivacyShieldProps } from "./PrivacyShield.types";
+import { trackEvent } from "@/lib/analytics";
 
 const STATUS_CONFIG = {
   idle: { icon: "🛡", text: "Local Mode", cls: "badge-green" },
@@ -19,6 +20,7 @@ export function PrivacyShield({
   onDownload,
   onReset,
   relatedTools,
+  tool = "unknown",
 }: PrivacyShieldProps) {
   const sc = STATUS_CONFIG[status];
 
@@ -104,13 +106,26 @@ export function PrivacyShield({
           <DownloadButton
             blobUrl={blobUrl}
             filename={outputFilename}
-            onDownloadComplete={onDownload ?? (() => {})}
+            tool={tool}
+            onDownloadComplete={() => {
+              trackEvent({
+                name: "file_downloaded",
+                tool,
+                outputSizeMb: outputSizeBytes
+                  ? parseFloat((outputSizeBytes / 1024 / 1024).toFixed(2))
+                  : 0,
+              });
+              onDownload?.();
+            }}
           />
         )}
         {onReset && (
           <button
             className="btn btn-secondary"
-            onClick={onReset}
+            onClick={() => {
+              trackEvent({ name: "tool_reset", tool });
+              onReset();
+            }}
             aria-label="Process another file"
           >
             ↩ Process Another File

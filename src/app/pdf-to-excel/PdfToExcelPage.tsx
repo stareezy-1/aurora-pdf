@@ -30,6 +30,7 @@ export default function PdfToExcelPage() {
           }}
           onError={(msg) => useAuroraStore.getState().failSession(msg)}
           aria-label="Drop a PDF to extract tables"
+          tool="pdf-to-excel"
         />
       )}
 
@@ -86,6 +87,7 @@ export default function PdfToExcelPage() {
           blobUrl={vm.resultBlobUrl}
           onDownload={vm.clearWorkbox}
           onReset={vm.handleReset}
+          tool="pdf-to-excel"
         />
       )}
     </ToolLayout>

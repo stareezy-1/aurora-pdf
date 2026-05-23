@@ -459,6 +459,7 @@ export default function EditPdfPage() {
             onFilesAccepted={vm.handleFileDrop}
             onError={(msg) => useAuroraStore.getState().failSession(msg)}
             aria-label="Drop a PDF to edit"
+            tool="edit"
           />
         )}
         <ProgressPanel
@@ -476,6 +477,7 @@ export default function EditPdfPage() {
             blobUrl={vm.resultBlobUrl}
             onDownload={vm.handleReset}
             onReset={vm.handleReset}
+            tool="edit"
           />
         )}
       </ToolLayout>
@@ -1507,8 +1509,8 @@ export default function EditPdfPage() {
                   vm.overlayUndoCount > 0
                     ? `Undo overlay change (${vm.overlayUndoCount} available)`
                     : vm.snapshots.length > 0
-                    ? `Undo PDF change (${vm.snapshots.length} available)`
-                    : "Nothing to undo"
+                      ? `Undo PDF change (${vm.snapshots.length} available)`
+                      : "Nothing to undo"
                 }
                 aria-label="Undo"
               >

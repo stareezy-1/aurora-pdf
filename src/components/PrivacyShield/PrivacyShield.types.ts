@@ -16,4 +16,6 @@ export interface PrivacyShieldProps {
   onReset?: () => void;
   /** Related tools to show in "Try another tool" section when status === 'success' */
   relatedTools?: RelatedTool[];
+  /** Tool name for analytics (e.g. "compress", "ocr"). */
+  tool?: string;
 }

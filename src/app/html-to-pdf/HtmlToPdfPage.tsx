@@ -197,6 +197,7 @@ export default function HtmlToPdfPage() {
             accept={[{ mime: "text/html", extension: ".html" }]}
             onFilesAccepted={() => {}}
             onError={() => {}}
+            tool="html-to-pdf"
           />
           <p
             style={{
@@ -398,6 +399,7 @@ export default function HtmlToPdfPage() {
           blobUrl={vm.resultBlobUrl}
           onDownload={vm.clearWorkbox}
           onReset={handleReset}
+          tool="html-to-pdf"
         />
       )}
     </ToolLayout>

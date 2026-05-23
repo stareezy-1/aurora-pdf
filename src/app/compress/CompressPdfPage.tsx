@@ -97,6 +97,7 @@ export default function CompressPdfPage() {
           onFilesAccepted={vm.handleFileDrop}
           onError={(msg) => useAuroraStore.getState().failSession(msg)}
           aria-label="Drop a PDF file to compress"
+          tool="compress"
         />
       )}
 
@@ -260,6 +261,7 @@ export default function CompressPdfPage() {
             blobUrl={vm.resultBlobUrl}
             onDownload={vm.clearWorkbox}
             onReset={vm.handleReset}
+            tool="compress"
           />
         </>
       )}

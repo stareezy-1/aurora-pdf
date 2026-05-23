@@ -11,6 +11,7 @@
     "test": "vitest --run"
   },
   "dependencies": {
+    "@sentry/react": "8",
     "@stareezy-ui/tokens": "^0.1.2",
     "docx": "8.5.0",
     "html2canvas": "1.4.1",

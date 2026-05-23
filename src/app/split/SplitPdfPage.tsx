@@ -43,6 +43,7 @@ export default function SplitPdfPage() {
           onFilesAccepted={vm.handleFileDrop}
           onError={(msg) => useAuroraStore.getState().failSession(msg)}
           aria-label="Drop a PDF to split"
+          tool="split"
         />
       )}
 
@@ -168,6 +169,7 @@ export default function SplitPdfPage() {
           blobUrl={vm.resultBlobUrl}
           onDownload={vm.clearWorkbox}
           onReset={vm.handleReset}
+          tool="split"
         />
       )}
     </ToolLayout>

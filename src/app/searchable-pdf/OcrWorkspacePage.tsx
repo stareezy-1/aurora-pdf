@@ -286,14 +286,14 @@ export function OcrWorkspacePage({ file, onReset }: OcrWorkspacePageProps) {
                           page.status === "done"
                             ? "rgba(0,255,136,0.15)"
                             : page.status === "error"
-                            ? "rgba(239,68,68,0.15)"
-                            : "rgba(245,158,11,0.15)",
+                              ? "rgba(239,68,68,0.15)"
+                              : "rgba(245,158,11,0.15)",
                         color:
                           page.status === "done"
                             ? "var(--green)"
                             : page.status === "error"
-                            ? "var(--red, #ef4444)"
-                            : "var(--amber, #f59e0b)",
+                              ? "var(--red, #ef4444)"
+                              : "var(--amber, #f59e0b)",
                         fontWeight: 600,
                       }}
                     >
@@ -594,6 +594,7 @@ export function OcrWorkspacePage({ file, onReset }: OcrWorkspacePageProps) {
             }
             onReset={onReset}
             relatedTools={RELATED_TOOLS}
+            tool="searchable-pdf"
           />
         </div>
       )}

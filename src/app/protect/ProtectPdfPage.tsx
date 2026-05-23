@@ -54,6 +54,7 @@ export default function ProtectPdfPage() {
           onFilesAccepted={vm.handleFileDrop}
           onError={(msg) => useAuroraStore.getState().failSession(msg)}
           aria-label="Drop a PDF to protect"
+          tool="protect"
         />
       )}
 
@@ -141,8 +142,8 @@ export default function ProtectPdfPage() {
                     vm.passwordStrength === "weak"
                       ? 33
                       : vm.passwordStrength === "medium"
-                      ? 66
-                      : 100
+                        ? 66
+                        : 100
                   }
                   aria-valuemin={0}
                   aria-valuemax={100}
@@ -317,6 +318,7 @@ export default function ProtectPdfPage() {
           blobUrl={vm.resultBlobUrl}
           onDownload={vm.clearWorkbox}
           onReset={vm.handleReset}
+          tool="protect"
         />
       )}
     </ToolLayout>

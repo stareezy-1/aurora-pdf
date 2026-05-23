@@ -82,6 +82,7 @@ export default function SearchablePdfPage() {
         onFilesAccepted={handleFilesAccepted}
         onError={(msg) => setErrorMessage(msg)}
         aria-label="Drop a PDF file to make it searchable"
+        tool="searchable-pdf"
       />
     </ToolLayout>
   );

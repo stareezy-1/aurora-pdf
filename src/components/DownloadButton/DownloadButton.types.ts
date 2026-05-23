@@ -3,4 +3,6 @@ export interface DownloadButtonProps {
   filename: string;
   onDownloadComplete: () => void;
   disabled?: boolean;
+  /** Tool name for analytics (e.g. "compress", "ocr"). Defaults to "unknown". */
+  tool?: string;
 }
