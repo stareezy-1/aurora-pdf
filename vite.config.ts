@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "prompt",
+      registerType: "autoUpdate",
       includeAssets: [
         "favicon.svg",
         "icon-192.svg",
@@ -138,15 +138,17 @@ export default defineConfig({
             },
           },
           {
-            // StaleWhileRevalidate for same-origin JS/WASM chunks
+            // NetworkFirst for same-origin JS/WASM chunks — always serve fresh
+            // code when online so deployments take effect immediately.
             urlPattern: ({ url }: { url: URL }) =>
               url.origin === self.location.origin &&
               (url.pathname.endsWith(".js") ||
                 url.pathname.endsWith(".mjs") ||
                 url.pathname.endsWith(".wasm")),
-            handler: "StaleWhileRevalidate",
+            handler: "NetworkFirst",
             options: {
               cacheName: "aurora-runtime",
+              networkTimeoutSeconds: 5,
               expiration: { maxEntries: 60 },
             },
           },
