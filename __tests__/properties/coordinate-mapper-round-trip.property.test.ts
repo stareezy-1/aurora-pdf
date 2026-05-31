@@ -86,32 +86,6 @@ const dprArb: fc.Arbitrary<number> = fc.oneof(
   fc.constant(3),
 );
 
-/**
- * Generate a valid overlay rect that fits within the logical canvas area.
- * naturalWidth/naturalHeight are the physical pixel dimensions of the image.
- * The logical canvas size is naturalWidth/dpr × naturalHeight/dpr at zoom 1.
- * At a given zoom the displayed size is logicalW*zoom × logicalH*zoom.
- */
-const _overlayArb = (
-  naturalWidth: number,
-  naturalHeight: number,
-  dpr: number,
-  zoom: number,
-): fc.Arbitrary<OverlayRect> => {
-  const logicalW = (naturalWidth / dpr) * zoom;
-  const logicalH = (naturalHeight / dpr) * zoom;
-  // Ensure width/height are at least 1 px and fit within the canvas
-  return fc
-    .tuple(
-      posFloat(0, logicalW * 0.9), // x
-      posFloat(0, logicalH * 0.9), // y
-      posFloat(1, Math.max(1, logicalW * 0.5)), // width
-      posFloat(1, Math.max(1, logicalH * 0.5)), // height
-    )
-    .filter(([x, y, w, h]) => x + w <= logicalW && y + h <= logicalH)
-    .map(([x, y, w, h]) => ({ x, y, width: w, height: h }));
-};
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("Property 1: CoordinateMapper round-trip invariant", () => {
