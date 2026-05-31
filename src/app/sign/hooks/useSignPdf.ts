@@ -1,30 +1,58 @@
+/**
+ * useSignPdf — upgraded hook for the Sign PDF tool.
+ *
+ * Changes from the original:
+ * - Uses useFileSession + usePdfProcessor instead of useFileProcessor
+ * - Supports multiple signature overlays (array of SigOverlay)
+ * - Each overlay has pageIndex, opacity (10–100), rotation (0–360°), and id
+ * - Loads saved signatures from signature-manager on mount
+ * - Saves new signatures to localStorage after successful apply
+ * - Supports 6+ fonts from SIGNATURE_FONTS in signature-manager
+ * - Export applies all overlays in a single pass via applySignatures
+ *
+ * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10
+ */
+
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useFileProcessor } from "@/hooks/useFileProcessor";
+import { useFileSession } from "@/hooks/useFileSession";
+import { usePdfProcessor } from "@/hooks/usePdfProcessor";
 import { useAuroraStore } from "@/stores/aurora.store";
+import { mapOverlayToPdf } from "@/lib/coordinate-mapper";
 import {
-  embedSignature,
-  getPageCount,
-  renderPagePreview,
-} from "@/engines/pdf-engine";
+  SIGNATURE_FONTS,
+  SIGNATURE_FONTS_URL,
+  loadSavedSignatures,
+  saveSignature,
+  deleteSignature,
+  renameSignature,
+  applySignatures,
+} from "@/engines/signature-manager";
 import { buildOutputFilename } from "@/lib/filename-utils";
 import { SignatureImageTooLargeError } from "@/lib/errors";
-import type { SignatureMethod } from "@/types/tool.types";
+import type { SignatureMethod, SavedSignature } from "@/types/tool.types";
 
-const MAX_SIG_MB = 5;
-const SAVED_SIG_KEY = "aurora-saved-signature";
-
-export const SIGNATURE_FONTS = [
-  "Dancing Script",
-  "Pacifico",
-  "Great Vibes",
-] as const;
+export { SIGNATURE_FONTS, SIGNATURE_FONTS_URL };
 export type SignatureFont = (typeof SIGNATURE_FONTS)[number];
 
+const MAX_SIG_MB = 5;
+
+const PDF_ACCEPT = [{ mime: "application/pdf", extension: ".pdf" }];
+
+/** Extended overlay — each placed signature on the canvas. */
 export interface SigOverlay {
+  id: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  pageIndex: number;
+  opacity: number; // 10–100
+  rotation: number; // 0–360
+  dataUrl: string;
+}
+
+function generateId(): string {
+  return `sig-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function useSignPdf() {
@@ -35,109 +63,130 @@ export function useSignPdf() {
     errorMessage,
     resultBlobUrl,
     outputFilename,
-    clearWorkbox,
   } = useAuroraStore();
 
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [, setPdfBytes] = useState<Uint8Array | null>(null);
-  const [pageCount, setPageCount] = useState(0);
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pagePreviews, setPagePreviews] = useState<string[]>([]);
+  // ── File session ──────────────────────────────────────────────────────────
+  const session = useFileSession({
+    accept: PDF_ACCEPT,
+    generateAllPreviews: true,
+  });
+
+  // ── Signature creation state ──────────────────────────────────────────────
   const [method, setMethod] = useState<SignatureMethod>("draw");
   const [sigDataUrl, setSigDataUrl] = useState<string | null>(null);
   const [typedName, setTypedName] = useState("");
-  const [typedSigFont, setTypedSigFont] =
-    useState<SignatureFont>("Dancing Script");
-  const [typedSigSize, setTypedSigSize] = useState(38);
+  const [typedSigFont, setTypedSigFont] = useState<SignatureFont>(
+    SIGNATURE_FONTS[0],
+  );
+  const [typedSigSize] = useState(38);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [overlay, setOverlay] = useState<SigOverlay>({
-    x: 60,
-    y: 400,
-    width: 200,
-    height: 80,
-  });
-  const overlayDragOriginRef = useRef<{ x: number; y: number } | null>(null);
-  const overlayResizeOriginRef = useRef<{ w: number; h: number } | null>(null);
 
-  // ── Saved signature (localStorage) ──────────────────────────────────────
-  const [savedSigDataUrl, setSavedSigDataUrl] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(SAVED_SIG_KEY);
-    } catch {
-      return null;
-    }
-  });
+  // ── Page navigation ───────────────────────────────────────────────────────
+  const [pageIndex, setPageIndex] = useState(0);
 
-  // Persist saved signature when a draw-mode signature is successfully applied
-  const persistSavedSignature = useCallback((dataUrl: string) => {
-    try {
-      localStorage.setItem(SAVED_SIG_KEY, dataUrl);
-      setSavedSigDataUrl(dataUrl);
-    } catch {
-      // localStorage may be unavailable in some environments
-    }
+  // ── Multiple overlays ─────────────────────────────────────────────────────
+  const [overlays, setOverlays] = useState<SigOverlay[]>([]);
+  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(
+    null,
+  );
+
+  // Per-overlay drag/resize origin refs (keyed by overlay id)
+  const overlayDragOriginRef = useRef<{
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const overlayResizeOriginRef = useRef<{
+    id: string;
+    w: number;
+    h: number;
+  } | null>(null);
+
+  // ── Saved signatures ──────────────────────────────────────────────────────
+  const [savedSignatures, setSavedSignatures] = useState<SavedSignature[]>(() =>
+    loadSavedSignatures(),
+  );
+
+  // Reload saved signatures from localStorage whenever the component mounts
+  useEffect(() => {
+    setSavedSignatures(loadSavedSignatures());
   }, []);
 
-  // Load the saved signature as the active signature
-  const loadSavedSignature = useCallback(() => {
-    if (savedSigDataUrl) {
-      setSigDataUrl(savedSigDataUrl);
-    }
-  }, [savedSigDataUrl]);
-
-  const processor = useFileProcessor({
-    process: async (file, onProgress) => {
-      if (!sigDataUrl) throw new Error("No signature provided.");
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      onProgress(30, "Embedding signature…");
-      const previewImg = document.querySelector(
-        ".editor-page-wrap img",
-      ) as HTMLImageElement | null;
-      const imgW = previewImg?.naturalWidth ?? 595;
-      const imgH = previewImg?.naturalHeight ?? 842;
-      const dispW = previewImg?.clientWidth ?? imgW;
-      const dispH = previewImg?.clientHeight ?? imgH;
-      const scaleX = imgW / dispW;
-      const scaleY = imgH / dispH;
-      const result = await embedSignature(bytes, {
-        method,
-        dataUrl: sigDataUrl,
-        typedName: typedName || null,
-        fontFamily: typedSigFont,
-        fontSize: typedSigSize,
-        pageIndex,
-        x: (overlay.x * scaleX) / imgW,
-        y: (overlay.y * scaleY) / imgH,
-        width: (overlay.width * scaleX) / imgW,
-        height: (overlay.height * scaleY) / imgH,
-      });
-      onProgress(100);
-      // Save drawn/typed signature to localStorage for future reuse
-      if (method === "draw" || method === "type") {
-        persistSavedSignature(sigDataUrl);
+  // ── Processor ─────────────────────────────────────────────────────────────
+  const processor = usePdfProcessor<{ overlays: SigOverlay[] }>({
+    processFn: async (bytes, config, onProgress) => {
+      if (config.overlays.length === 0) {
+        throw new Error(
+          "No signatures placed. Please place at least one signature before applying.",
+        );
       }
-      return {
-        blob: new Blob([result as any], { type: "application/pdf" }),
-        filename: buildOutputFilename(file.name, "sign"),
-      };
+
+      // Convert each overlay to a SignaturePlacement using CoordinateMapper
+      const previewImgs = document.querySelectorAll<HTMLImageElement>(
+        ".editor-page-wrap img",
+      );
+
+      const placements = config.overlays.map((ov) => {
+        // Find the preview image for this overlay's page
+        const imgEl = previewImgs[ov.pageIndex] ?? previewImgs[0];
+        const pageDim = session.pageDimensions[ov.pageIndex] ?? {
+          width: 595,
+          height: 842,
+        };
+
+        let pdfRect = { x: 0, y: 0, width: 100, height: 40 };
+
+        if (imgEl && imgEl.naturalWidth > 0) {
+          pdfRect = mapOverlayToPdf({
+            overlay: { x: ov.x, y: ov.y, width: ov.width, height: ov.height },
+            pageIndex: ov.pageIndex,
+            zoom: 1,
+            containerEl: imgEl,
+            pageDimensions: pageDim,
+          });
+        }
+
+        return {
+          dataUrl: ov.dataUrl,
+          pageIndex: ov.pageIndex,
+          x: pdfRect.x,
+          y: pdfRect.y,
+          width: pdfRect.width,
+          height: pdfRect.height,
+          opacity: ov.opacity,
+          rotation: ov.rotation,
+        };
+      });
+
+      const result = await applySignatures(bytes, placements, onProgress);
+
+      // Persist each unique dataUrl as a saved signature
+      const uniqueDataUrls = [
+        ...new Set(config.overlays.map((o) => o.dataUrl)),
+      ];
+      for (const dataUrl of uniqueDataUrls) {
+        const existing = loadSavedSignatures().find(
+          (s) => s.dataUrl === dataUrl,
+        );
+        if (!existing) {
+          const newSig: SavedSignature = {
+            id: generateId(),
+            name: `Signature ${new Date().toLocaleDateString()}`,
+            dataUrl,
+            createdAt: Date.now(),
+          };
+          saveSignature(newSig);
+        }
+      }
+      setSavedSignatures(loadSavedSignatures());
+
+      return result;
     },
+    outputSuffix: "signed",
   });
 
-  async function handlePdfDrop(files: File[]) {
-    const file = files[0];
-    setPdfFile(file);
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    setPdfBytes(bytes);
-    const n = await getPageCount(bytes);
-    setPageCount(n);
-    setPageIndex(0);
-    const previews: string[] = [];
-    for (let i = 0; i < Math.min(n, 20); i++) {
-      previews.push(await renderPagePreview(bytes, i));
-    }
-    setPagePreviews(previews);
-  }
+  // ── Drawing handlers ──────────────────────────────────────────────────────
 
   function startDraw(e: React.MouseEvent<HTMLCanvasElement>) {
     const ctx = canvasRef.current?.getContext("2d");
@@ -178,7 +227,6 @@ export function useSignPdf() {
   // Re-render typed signature when font or name changes
   useEffect(() => {
     if (method === "type" && typedName) {
-      // Small delay to allow font to load
       const timer = setTimeout(renderTypedSig, 50);
       return () => clearTimeout(timer);
     }
@@ -205,73 +253,176 @@ export function useSignPdf() {
     setSigDataUrl(null);
   }
 
-  // ── Overlay drag ────────────────────────────────────────────────────────
+  // ── Place signature as overlay ────────────────────────────────────────────
+
+  /** Add the current sigDataUrl as a new overlay on the current page. */
+  function placeSignature() {
+    if (!sigDataUrl) return;
+    const newOverlay: SigOverlay = {
+      id: generateId(),
+      x: 60,
+      y: 400,
+      width: 200,
+      height: 80,
+      pageIndex,
+      opacity: 100,
+      rotation: 0,
+      dataUrl: sigDataUrl,
+    };
+    setOverlays((prev) => [...prev, newOverlay]);
+    setSelectedOverlayId(newOverlay.id);
+  }
+
+  /** Load a saved signature as the active sigDataUrl. */
+  function loadSavedSig(sig: SavedSignature) {
+    setSigDataUrl(sig.dataUrl);
+  }
+
+  /** Remove an overlay by id. */
+  function removeOverlay(id: string) {
+    setOverlays((prev) => prev.filter((o) => o.id !== id));
+    if (selectedOverlayId === id) setSelectedOverlayId(null);
+  }
+
+  /** Update opacity for a specific overlay. */
+  function setOverlayOpacity(id: string, opacity: number) {
+    setOverlays((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, opacity } : o)),
+    );
+  }
+
+  /** Update rotation for a specific overlay. */
+  function setOverlayRotation(id: string, rotation: number) {
+    setOverlays((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, rotation } : o)),
+    );
+  }
+
+  // ── Overlay drag ──────────────────────────────────────────────────────────
 
   const beginOverlayDrag = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
+    (e: React.MouseEvent | React.TouchEvent, id: string) => {
       e.stopPropagation();
-      overlayDragOriginRef.current = { x: overlay.x, y: overlay.y };
+      const ov = overlays.find((o) => o.id === id);
+      if (!ov) return;
+      overlayDragOriginRef.current = { id, x: ov.x, y: ov.y };
+      setSelectedOverlayId(id);
     },
-    [overlay.x, overlay.y],
+    [overlays],
   );
 
   const moveOverlayDrag = useCallback((delta: { dx: number; dy: number }) => {
     if (!overlayDragOriginRef.current) return;
-    setOverlay((prev) => ({
-      ...prev,
-      x: overlayDragOriginRef.current!.x + delta.dx,
-      y: overlayDragOriginRef.current!.y + delta.dy,
-    }));
+    const { id, x, y } = overlayDragOriginRef.current;
+    setOverlays((prev) =>
+      prev.map((o) =>
+        o.id === id ? { ...o, x: x + delta.dx, y: y + delta.dy } : o,
+      ),
+    );
   }, []);
 
   const endOverlayDrag = useCallback(() => {
     overlayDragOriginRef.current = null;
   }, []);
 
-  // ── Overlay resize ───────────────────────────────────────────────────────
+  // ── Overlay resize ────────────────────────────────────────────────────────
 
   const beginOverlayResize = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
+    (e: React.MouseEvent | React.TouchEvent, id: string) => {
       e.stopPropagation();
-      overlayResizeOriginRef.current = { w: overlay.width, h: overlay.height };
+      const ov = overlays.find((o) => o.id === id);
+      if (!ov) return;
+      overlayResizeOriginRef.current = { id, w: ov.width, h: ov.height };
     },
-    [overlay.width, overlay.height],
+    [overlays],
   );
 
   const moveOverlayResize = useCallback((delta: { dx: number; dy: number }) => {
     if (!overlayResizeOriginRef.current) return;
-    setOverlay((prev) => ({
-      ...prev,
-      width: Math.max(60, overlayResizeOriginRef.current!.w + delta.dx),
-      height: Math.max(30, overlayResizeOriginRef.current!.h + delta.dy),
-    }));
+    const { id, w, h } = overlayResizeOriginRef.current;
+    setOverlays((prev) =>
+      prev.map((o) =>
+        o.id === id
+          ? {
+              ...o,
+              width: Math.max(60, w + delta.dx),
+              height: Math.max(30, h + delta.dy),
+            }
+          : o,
+      ),
+    );
   }, []);
 
   const endOverlayResize = useCallback(() => {
     overlayResizeOriginRef.current = null;
   }, []);
 
-  function handleReset() {
-    clearWorkbox();
-    setPdfFile(null);
-    setPdfBytes(null);
-    setPagePreviews([]);
-    setSigDataUrl(null);
+  // ── Saved signature management ────────────────────────────────────────────
+
+  function handleDeleteSavedSig(id: string) {
+    deleteSignature(id);
+    setSavedSignatures(loadSavedSignatures());
   }
 
+  function handleRenameSavedSig(id: string, name: string) {
+    renameSignature(id, name);
+    setSavedSignatures(loadSavedSignatures());
+  }
+
+  // ── Apply / reset ─────────────────────────────────────────────────────────
+
+  function handleApply() {
+    if (!session.file || !session.bytes) return;
+    if (overlays.length === 0) {
+      useAuroraStore
+        .getState()
+        .failSession(
+          "No signatures placed. Please place at least one signature before applying.",
+        );
+      return;
+    }
+    processor.run(session.file, { overlays });
+  }
+
+  function handleReset() {
+    session.reset();
+    setOverlays([]);
+    setSelectedOverlayId(null);
+    setSigDataUrl(null);
+    setTypedName("");
+    clearCanvas();
+  }
+
+  // ── Derived helpers ───────────────────────────────────────────────────────
+
+  /** Overlays visible on the currently displayed page. */
+  const currentPageOverlays = overlays.filter((o) => o.pageIndex === pageIndex);
+
+  const selectedOverlay =
+    overlays.find((o) => o.id === selectedOverlayId) ?? null;
+
   return {
+    // Store state
     status,
     progress,
     progressLabel,
     errorMessage,
     resultBlobUrl,
     outputFilename,
-    clearWorkbox,
-    pdfFile,
-    pageCount,
+
+    // File session
+    pdfFile: session.file,
+    pageCount: session.pageCount,
+    pagePreviews: session.allPreviews,
+    pageDimensions: session.pageDimensions,
+    isLoading: session.isLoading,
+    handlePdfDrop: session.handleDrop,
+
+    // Page navigation
     pageIndex,
     setPageIndex,
-    pagePreviews,
+
+    // Signature creation
     method,
     setMethod,
     sigDataUrl,
@@ -281,27 +432,43 @@ export function useSignPdf() {
     typedSigFont,
     setTypedSigFont,
     typedSigSize,
-    setTypedSigSize,
     canvasRef,
     isDrawing,
-    overlay,
-    processor,
-    handlePdfDrop,
     startDraw,
     draw,
     endDraw,
     renderTypedSig,
     handleSigImageDrop,
     clearCanvas,
+
+    // Overlays
+    overlays,
+    currentPageOverlays,
+    selectedOverlayId,
+    setSelectedOverlayId,
+    selectedOverlay,
+    placeSignature,
+    removeOverlay,
+    setOverlayOpacity,
+    setOverlayRotation,
     beginOverlayDrag,
     moveOverlayDrag,
     endOverlayDrag,
     beginOverlayResize,
     moveOverlayResize,
     endOverlayResize,
+
+    // Saved signatures
+    savedSignatures,
+    loadSavedSig,
+    handleDeleteSavedSig,
+    handleRenameSavedSig,
+
+    // Apply / reset
+    processor,
+    handleApply,
     handleReset,
+
     MAX_SIG_MB,
-    savedSigDataUrl,
-    loadSavedSignature,
   };
 }

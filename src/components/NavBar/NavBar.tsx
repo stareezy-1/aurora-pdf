@@ -3,67 +3,21 @@ import { Link, useLocation } from "react-router";
 import { useAuroraStore } from "@/stores/aurora.store";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { PwaInstallModal } from "@/components/PwaInstallModal/PwaInstallModal";
+import type { NavItem } from "@/types/site.types";
 import type { NavBarProps } from "./NavBar.types";
+import { TOOL_REGISTRY } from "@/lib/tool-registry";
 
-// Category groupings for desktop nav dividers
-const TOOL_LINKS = [
-  // Convert
-  { path: "/ocr", label: "OCR to PDF", icon: "🔍", category: "Convert" },
+const NAV_ITEMS: NavItem[] = [
+  { label: "Home", to: "/" },
+  { label: "About", to: "/about" },
+  { label: "Contact", href: "https://stareezy.tech", external: true },
   {
-    path: "/searchable-pdf",
-    label: "Searchable PDF OCR",
-    icon: "🔎",
-    category: "Convert",
+    label: "GitHub",
+    href: "https://github.com/stareezy-1/aurora-pdf",
+    external: true,
+    variant: "button",
   },
-  { path: "/pdf-to-jpg", label: "PDF to JPG", icon: "🖼️", category: "Convert" },
-  {
-    path: "/pdf-to-word",
-    label: "PDF to Word",
-    icon: "📝",
-    category: "Convert",
-  },
-  {
-    path: "/word-to-pdf",
-    label: "Word to PDF",
-    icon: "📄",
-    category: "Convert",
-  },
-  {
-    path: "/pdf-to-excel",
-    label: "PDF to Excel",
-    icon: "📊",
-    category: "Convert",
-  },
-  {
-    path: "/excel-to-pdf",
-    label: "Excel to PDF",
-    icon: "📋",
-    category: "Convert",
-  },
-  {
-    path: "/html-to-pdf",
-    label: "HTML to PDF",
-    icon: "🌐",
-    category: "Convert",
-  },
-  // Edit
-  { path: "/edit", label: "Edit PDF", icon: "✏️", category: "Edit" },
-  { path: "/sign", label: "Sign PDF", icon: "✍️", category: "Edit" },
-  { path: "/watermark", label: "Add Watermark", icon: "💧", category: "Edit" },
-  { path: "/split", label: "Split PDF", icon: "✂️", category: "Edit" },
-  { path: "/organize", label: "Organize PDF", icon: "📑", category: "Edit" },
-  // Optimize
-  {
-    path: "/compress",
-    label: "Compress PDF",
-    icon: "🗜️",
-    category: "Optimize",
-  },
-  // Security
-  { path: "/protect", label: "Protect PDF", icon: "🔐", category: "Security" },
-] as const;
-
-const CATEGORY_ORDER = ["Convert", "Edit", "Optimize", "Security"] as const;
+];
 
 const STATUS_CONFIG = {
   idle: { icon: "🛡", text: "Local Mode", cls: "badge-green" },
@@ -72,11 +26,27 @@ const STATUS_CONFIG = {
   error: { icon: "⚠", text: "Error", cls: "badge-red" },
 };
 
+// GitHub SVG mark icon
+function GitHubIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" />
+    </svg>
+  );
+}
+
 export function NavBar({ currentPath }: NavBarProps) {
   const status = useAuroraStore((s) => s.status);
   const theme = useAuroraStore((s) => s.theme);
   const toggleTheme = useAuroraStore((s) => s.toggleTheme);
   const isOnline = useAuroraStore((s) => s.isOnline);
+  const openCommandPalette = useAuroraStore((s) => s.openCommandPalette);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navRef = useRef<HTMLElement>(null);
@@ -106,22 +76,132 @@ export function NavBar({ currentPath }: NavBarProps) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Build desktop nav with category dividers
-  const desktopNavItems: Array<
-    | { type: "link"; path: string; label: string }
-    | { type: "divider"; key: string }
-  > = [];
-
-  CATEGORY_ORDER.forEach((cat, catIdx) => {
-    const links = TOOL_LINKS.filter((t) => t.category === cat);
-    if (links.length === 0) return;
-    if (catIdx > 0) {
-      desktopNavItems.push({ type: "divider", key: `divider-${cat}` });
-    }
-    links.forEach((l) =>
-      desktopNavItems.push({ type: "link", path: l.path, label: l.label }),
+  // Active link detection: match internal `to` against current pathname
+  function isActive(item: NavItem): boolean {
+    if (!item.to) return false;
+    if (item.to === "/") return location.pathname === "/";
+    return (
+      location.pathname === item.to ||
+      location.pathname.startsWith(item.to + "/")
     );
-  });
+  }
+
+  function renderNavItem(item: NavItem, compact = false) {
+    const active = isActive(item);
+
+    // GitHub button variant — outlined badge with icon
+    if (item.variant === "button") {
+      return (
+        <a
+          key={item.label}
+          href={item.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="View AuroraPDF on GitHub (opens in new tab)"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: compact ? "7px 14px" : "5px 12px",
+            borderRadius: "var(--radius-sm)",
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            color: "var(--text)",
+            fontSize: compact ? 14 : 12,
+            fontWeight: 600,
+            textDecoration: "none",
+            transition: "all 0.15s",
+            whiteSpace: "nowrap" as const,
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.borderColor =
+              "var(--text-2)";
+            (e.currentTarget as HTMLElement).style.color = "var(--text)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.borderColor =
+              "var(--border)";
+            (e.currentTarget as HTMLElement).style.color = "var(--text)";
+          }}
+        >
+          <GitHubIcon />
+          GitHub
+        </a>
+      );
+    }
+
+    // External link (non-button)
+    if (item.external && item.href) {
+      return (
+        <a
+          key={item.label}
+          href={item.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            textDecoration: "none",
+            fontSize: compact ? 14 : 13,
+            fontWeight: 500,
+            padding: compact ? "8px 12px" : "5px 12px",
+            borderRadius: "var(--radius-sm)",
+            color: "var(--text-2)",
+            background: "transparent",
+            transition: "all 0.15s",
+            whiteSpace: "nowrap" as const,
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "var(--text)";
+            (e.currentTarget as HTMLElement).style.background =
+              "var(--surface-2)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "var(--text-2)";
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+          }}
+        >
+          {item.label}
+        </a>
+      );
+    }
+
+    // Internal link
+    return (
+      <Link
+        key={item.label}
+        to={item.to!}
+        aria-current={active ? "page" : undefined}
+        style={{
+          textDecoration: "none",
+          fontSize: compact ? 14 : 13,
+          fontWeight: active ? 700 : 500,
+          padding: compact ? "8px 12px" : "5px 12px",
+          borderRadius: "var(--radius-sm)",
+          color: active ? "var(--green)" : "var(--text-2)",
+          background: active ? "rgba(0,255,136,0.1)" : "transparent",
+          transition: "all 0.15s",
+          whiteSpace: "nowrap" as const,
+          flexShrink: 0,
+        }}
+        onMouseEnter={(e) => {
+          if (!active) {
+            (e.currentTarget as HTMLElement).style.color = "var(--text)";
+            (e.currentTarget as HTMLElement).style.background =
+              "var(--surface-2)";
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!active) {
+            (e.currentTarget as HTMLElement).style.color = "var(--text-2)";
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+          }
+        }}
+      >
+        {item.label}
+      </Link>
+    );
+  }
 
   return (
     <>
@@ -155,6 +235,7 @@ export function NavBar({ currentPath }: NavBarProps) {
             display: "flex",
             alignItems: "center",
             gap: 6,
+            flexShrink: 0,
           }}
           aria-label="AuroraPDF home"
         >
@@ -175,75 +256,83 @@ export function NavBar({ currentPath }: NavBarProps) {
           </span>
         </Link>
 
-        {/* Desktop links — single scrollable row with category dividers */}
+        {/* Desktop nav links — centered */}
         <div
           className="desktop-nav"
           style={{
             display: "flex",
-            gap: 2,
+            gap: 4,
             alignItems: "center",
-            flexWrap: "nowrap",
-            overflowX: "auto",
-            scrollbarWidth: "none",
-            msOverflowStyle: "none",
             flex: 1,
-            margin: "0 12px",
+            justifyContent: "center",
+            margin: "0 16px",
           }}
           role="list"
         >
-          {desktopNavItems.map((item) => {
-            if (item.type === "divider") {
-              return (
-                <span
-                  key={item.key}
-                  aria-hidden="true"
-                  style={{
-                    display: "inline-block",
-                    width: 1,
-                    height: 16,
-                    background: "var(--border)",
-                    margin: "0 4px",
-                    flexShrink: 0,
-                  }}
-                />
-              );
-            }
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                role="listitem"
-                aria-current={currentPath === item.path ? "page" : undefined}
-                style={{
-                  textDecoration: "none",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  padding: "4px 9px",
-                  borderRadius: "var(--radius-sm)",
-                  color:
-                    currentPath === item.path
-                      ? "var(--green)"
-                      : "var(--text-2)",
-                  background:
-                    currentPath === item.path
-                      ? "rgba(0,255,136,0.1)"
-                      : "transparent",
-                  transition: "all 0.15s",
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                }}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+          {NAV_ITEMS.map((item) => (
+            <div key={item.label} role="listitem">
+              {renderNavItem(item)}
+            </div>
+          ))}
         </div>
 
-        {/* Desktop right */}
+        {/* Desktop right — search, theme toggle, install, status badge */}
         <div
           className="nav-right-desktop"
-          style={{ display: "flex", alignItems: "center", gap: 10 }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexShrink: 0,
+          }}
         >
+          {/* Search / Command Palette button */}
+          <button
+            onClick={openCommandPalette}
+            aria-label="Search tools (⌘K)"
+            title="Search tools (⌘K)"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "5px 12px",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              color: "var(--text-2)",
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 0.15s",
+              whiteSpace: "nowrap",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor =
+                "var(--border-2)";
+              (e.currentTarget as HTMLElement).style.color = "var(--text)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor =
+                "var(--border)";
+              (e.currentTarget as HTMLElement).style.color = "var(--text-2)";
+            }}
+          >
+            <span style={{ fontSize: 13 }}>🔍</span>
+            <span>Search {TOOL_REGISTRY.length} tools</span>
+            <kbd
+              style={{
+                background: "var(--surface-3, var(--bg))",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                padding: "1px 5px",
+                fontSize: 10,
+                color: "var(--text-muted)",
+                fontFamily: "inherit",
+              }}
+            >
+              ⌘K
+            </kbd>
+          </button>
           {/* Offline badge replaces status badge when offline */}
           {!isOnline ? (
             <span
@@ -386,23 +475,67 @@ export function NavBar({ currentPath }: NavBarProps) {
           </button>
         </div>
 
-        <div className="nav-drawer-links" role="list">
-          {TOOL_LINKS.map(({ path, label, icon }) => (
-            <Link
-              key={path}
-              to={path}
+        {/* Drawer nav links */}
+        <div
+          className="nav-drawer-links"
+          role="list"
+          style={{ padding: "8px 0" }}
+        >
+          {NAV_ITEMS.map((item) => (
+            <div
+              key={item.label}
               role="listitem"
-              className={`nav-drawer-link${
-                currentPath === path ? " active" : ""
-              }`}
-              aria-current={currentPath === path ? "page" : undefined}
+              style={{ padding: "2px 16px" }}
             >
-              <span style={{ fontSize: 18, width: 28, textAlign: "center" }}>
-                {icon}
-              </span>
-              {label}
-            </Link>
+              {renderNavItem(item, true)}
+            </div>
           ))}
+        </div>
+
+        {/* Mobile search button */}
+        <div style={{ padding: "8px 16px" }}>
+          <button
+            onClick={() => {
+              setDrawerOpen(false);
+              openCommandPalette();
+            }}
+            aria-label="Search tools"
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 14px",
+              borderRadius: "var(--radius-md)",
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              color: "var(--text-2)",
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: "pointer",
+              textAlign: "left",
+              transition: "all 0.15s",
+              fontFamily: "var(--font)",
+            }}
+          >
+            <span style={{ fontSize: 16 }}>🔍</span>
+            <span style={{ flex: 1 }}>
+              Search {TOOL_REGISTRY.length} tools…
+            </span>
+            <kbd
+              style={{
+                background: "var(--surface-3, var(--bg))",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                padding: "1px 6px",
+                fontSize: 11,
+                color: "var(--text-muted)",
+                fontFamily: "inherit",
+              }}
+            >
+              ⌘K
+            </kbd>
+          </button>
         </div>
 
         <div className="nav-drawer-footer">

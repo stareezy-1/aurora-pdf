@@ -3,135 +3,35 @@ import { Link, useLocation } from "react-router";
 import { NavBar } from "@/components/NavBar/NavBar";
 import { Footer } from "@/components/Footer/Footer";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { TOOL_DESCRIPTIONS } from "@/lib/format-utils";
-import { CategoryFilterBar } from "@/components/CategoryFilterBar/CategoryFilterBar";
+import { TOOL_REGISTRY, getToolsByCategory } from "@/lib/tool-registry";
 
-type ToolCategory = "All" | "Convert" | "Edit" | "Optimize" | "Security";
+// ── Category filter tabs ───────────────────────────────────────────────────
 
-// ── Tool registry ──────────────────────────────────────────────────────────
+type FilterTab =
+  | "All"
+  | "Convert"
+  | "Edit"
+  | "Organize"
+  | "Optimize"
+  | "Secure";
 
-const TOOLS = [
-  {
-    path: "/compress",
-    name: "Compress PDF",
-    icon: "🗜️",
-    color: "#00ff88",
-    bg: "rgba(0,255,136,0.08)",
-    category: "optimize",
-  },
-  {
-    path: "/ocr",
-    name: "OCR: Images to PDF",
-    icon: "🔍",
-    color: "#00ccff",
-    bg: "rgba(0,204,255,0.08)",
-    category: "convert",
-  },
-  {
-    path: "/pdf-to-jpg",
-    name: "PDF to JPG",
-    icon: "🖼️",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.08)",
-    category: "convert",
-  },
-  {
-    path: "/pdf-to-word",
-    name: "PDF to Word",
-    icon: "📝",
-    color: "#7c3aed",
-    bg: "rgba(124,58,237,0.08)",
-    category: "convert",
-  },
-  {
-    path: "/word-to-pdf",
-    name: "Word to PDF",
-    icon: "📄",
-    color: "#00ff88",
-    bg: "rgba(0,255,136,0.08)",
-    category: "convert",
-  },
-  {
-    path: "/pdf-to-excel",
-    name: "PDF to Excel",
-    icon: "📊",
-    color: "#4ade80",
-    bg: "rgba(74,222,128,0.08)",
-    category: "convert",
-  },
-  {
-    path: "/excel-to-pdf",
-    name: "Excel to PDF",
-    icon: "📋",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.08)",
-    category: "convert",
-  },
-  {
-    path: "/html-to-pdf",
-    name: "HTML to PDF",
-    icon: "🌐",
-    color: "#00ccff",
-    bg: "rgba(0,204,255,0.08)",
-    category: "convert",
-  },
-  {
-    path: "/edit",
-    name: "Edit PDF",
-    icon: "✏️",
-    color: "#00ccff",
-    bg: "rgba(0,204,255,0.08)",
-    category: "edit",
-  },
-  {
-    path: "/sign",
-    name: "Sign PDF",
-    icon: "✍️",
-    color: "#7c3aed",
-    bg: "rgba(124,58,237,0.08)",
-    category: "edit",
-  },
-  {
-    path: "/watermark",
-    name: "Add Watermark",
-    icon: "💧",
-    color: "#00ff88",
-    bg: "rgba(0,255,136,0.08)",
-    category: "edit",
-  },
-  {
-    path: "/organize",
-    name: "Organize PDF",
-    icon: "📑",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.08)",
-    category: "edit",
-  },
-  {
-    path: "/split",
-    name: "Split PDF",
-    icon: "✂️",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.08)",
-    category: "edit",
-  },
-  {
-    path: "/protect",
-    name: "Protect PDF",
-    icon: "🔐",
-    color: "#7c3aed",
-    bg: "rgba(124,58,237,0.08)",
-    category: "security",
-  },
-  {
-    path: "/searchable-pdf",
-    name: "Searchable PDF OCR",
-    icon: "🔎",
-    color: "#00ccff",
-    bg: "rgba(0,204,255,0.08)",
-    category: "convert",
-  },
+const FILTER_TABS: FilterTab[] = [
+  "All",
+  "Convert",
+  "Edit",
+  "Organize",
+  "Optimize",
+  "Secure",
 ];
+
+const CATEGORY_MAP: Record<FilterTab, string[]> = {
+  All: [],
+  Convert: ["convert-to", "convert-from"],
+  Edit: ["edit"],
+  Organize: ["organize"],
+  Optimize: ["optimize"],
+  Secure: ["secure"],
+};
 
 // ── Animated counter ───────────────────────────────────────────────────────
 
@@ -163,7 +63,7 @@ function AnimatedCounter({
   );
 }
 
-// ── Floating PDF document SVG asset ───────────────────────────────────────
+// ── Floating PDF asset ─────────────────────────────────────────────────────
 
 function FloatingPdfAsset() {
   return (
@@ -171,7 +71,6 @@ function FloatingPdfAsset() {
       style={{ position: "relative", width: 280, height: 320, flexShrink: 0 }}
       aria-hidden="true"
     >
-      {/* Glow */}
       <div
         style={{
           position: "absolute",
@@ -182,8 +81,6 @@ function FloatingPdfAsset() {
           animation: "pulse 3s ease-in-out infinite",
         }}
       />
-
-      {/* Back document (shadow) */}
       <div
         style={{
           position: "absolute",
@@ -197,8 +94,6 @@ function FloatingPdfAsset() {
           transform: "rotate(4deg)",
         }}
       />
-
-      {/* Main document */}
       <div
         style={{
           position: "absolute",
@@ -212,7 +107,6 @@ function FloatingPdfAsset() {
           animation: "float 4s ease-in-out infinite",
         }}
       >
-        {/* Document header */}
         <div
           style={{
             height: 48,
@@ -258,8 +152,6 @@ function FloatingPdfAsset() {
             }}
           />
         </div>
-
-        {/* Document body */}
         <div
           style={{
             padding: 20,
@@ -268,7 +160,6 @@ function FloatingPdfAsset() {
             gap: 10,
           }}
         >
-          {/* Title line */}
           <div
             style={{
               height: 14,
@@ -278,7 +169,6 @@ function FloatingPdfAsset() {
               opacity: 0.7,
             }}
           />
-          {/* Text lines */}
           {[90, 100, 75, 85, 60].map((w, i) => (
             <div
               key={i}
@@ -291,11 +181,9 @@ function FloatingPdfAsset() {
               }}
             />
           ))}
-          {/* Divider */}
           <div
             style={{ height: 1, background: "var(--border)", margin: "4px 0" }}
           />
-          {/* More lines */}
           {[80, 95, 65].map((w, i) => (
             <div
               key={i}
@@ -308,7 +196,6 @@ function FloatingPdfAsset() {
               }}
             />
           ))}
-          {/* Green accent block */}
           <div
             style={{
               marginTop: 8,
@@ -345,8 +232,6 @@ function FloatingPdfAsset() {
           </div>
         </div>
       </div>
-
-      {/* Floating badges */}
       <div
         style={{
           position: "absolute",
@@ -410,10 +295,19 @@ function FloatingPdfAsset() {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
+const TOOL_COUNT = TOOL_REGISTRY.length;
+
 export default function HomePage() {
   usePageTitle("Home");
   const location = useLocation();
-  const [activeCategory, setActiveCategory] = useState<ToolCategory>("All");
+  const [activeTab, setActiveTab] = useState<FilterTab>("All");
+
+  const visibleTools =
+    activeTab === "All"
+      ? TOOL_REGISTRY
+      : TOOL_REGISTRY.filter((t) =>
+          CATEGORY_MAP[activeTab].includes(t.category),
+        );
 
   return (
     <div
@@ -423,15 +317,52 @@ export default function HomePage() {
       <style>{`
         @media (max-width: 600px) {
           .home-tool-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .hero-asset { display: none !important; }
         }
-        @media (max-width: 480px) {
-          .stats-bar { overflow-x: auto; white-space: nowrap; }
+        .filter-tab {
+          padding: 7px 16px;
+          border-radius: 999px;
+          border: 1px solid var(--border);
+          background: transparent;
+          color: var(--text-2);
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s;
+          font-family: var(--font);
+          white-space: nowrap;
         }
+        .filter-tab:hover { border-color: var(--border-2); color: var(--text); }
+        .filter-tab.active { background: var(--green); border-color: var(--green); color: #050505; }
+        .tool-card {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          padding: 18px;
+          text-decoration: none;
+          transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s, background 0.15s;
+        }
+        .tool-card:hover {
+          transform: translateY(-2px);
+          background: var(--surface);
+        }
+        .feature-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          padding: 24px;
+          transition: border-color 0.2s, transform 0.2s;
+        }
+        .feature-card:hover { border-color: var(--border-2); transform: translateY(-2px); }
       `}</style>
+
       <NavBar currentPath={location.pathname} />
 
       <main style={{ flex: 1 }}>
-        {/* ── Hero Section ──────────────────────────────────────────────── */}
+        {/* ── Hero ──────────────────────────────────────────────────────── */}
         <section
           style={{
             position: "relative",
@@ -439,7 +370,6 @@ export default function HomePage() {
             padding: "clamp(48px, 8vw, 96px) 20px clamp(56px, 8vw, 96px)",
           }}
         >
-          {/* Background aurora glow */}
           <div
             style={{
               position: "absolute",
@@ -453,7 +383,6 @@ export default function HomePage() {
               pointerEvents: "none",
             }}
           />
-          {/* Grid overlay */}
           <div
             style={{
               position: "absolute",
@@ -478,9 +407,7 @@ export default function HomePage() {
               position: "relative",
             }}
           >
-            {/* Left: copy */}
             <div style={{ flex: "1 1 400px", maxWidth: 560 }}>
-              {/* Badge */}
               <div
                 style={{
                   display: "inline-flex",
@@ -510,7 +437,6 @@ export default function HomePage() {
                 FREE · OPEN SOURCE · PRIVACY-FIRST
               </div>
 
-              {/* Headline */}
               <h1
                 style={{
                   fontSize: "clamp(36px, 5.5vw, 64px)",
@@ -543,7 +469,6 @@ export default function HomePage() {
                 </span>
               </h1>
 
-              {/* Sub-copy */}
               <p
                 style={{
                   fontSize: "clamp(15px, 2vw, 18px)",
@@ -553,15 +478,17 @@ export default function HomePage() {
                   maxWidth: 480,
                 }}
               >
-                15 powerful PDF utilities — compress, convert, edit, sign,
-                watermark, split and more. Everything runs{" "}
+                <strong style={{ color: "var(--text)" }}>
+                  {TOOL_COUNT}+ powerful PDF utilities
+                </strong>{" "}
+                — compress, convert, edit, sign, merge, split, watermark and
+                more. Everything runs{" "}
                 <strong style={{ color: "var(--text)" }}>
                   100% in your browser
                 </strong>
                 . Your files never touch a server.
               </p>
 
-              {/* CTA buttons */}
               <div
                 style={{
                   display: "flex",
@@ -629,11 +556,10 @@ export default function HomePage() {
                       "var(--surface)";
                   }}
                 >
-                  Browse tools ↓
+                  Browse {TOOL_COUNT} tools ↓
                 </a>
               </div>
 
-              {/* Trust signals */}
               <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
                 {[
                   { icon: "🛡", label: "No uploads ever" },
@@ -657,9 +583,8 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Right: visual asset */}
             <div
-              className="floating-pdf-asset"
+              className="hero-asset"
               style={{
                 flex: "0 0 auto",
                 display: "flex",
@@ -681,7 +606,6 @@ export default function HomePage() {
           }}
         >
           <div
-            className="stats-bar"
             style={{
               maxWidth: 1100,
               margin: "0 auto",
@@ -692,7 +616,7 @@ export default function HomePage() {
             }}
           >
             {[
-              { value: 15, suffix: "", label: "PDF Tools" },
+              { value: TOOL_COUNT, suffix: "+", label: "PDF Tools" },
               { value: 100, suffix: "%", label: "Client-Side" },
               { value: 0, suffix: "", label: "Uploads" },
               { value: 0, suffix: "", label: "Accounts" },
@@ -784,14 +708,8 @@ export default function HomePage() {
               ].map(({ step, icon, title, desc }) => (
                 <div
                   key={step}
-                  style={{
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius-lg)",
-                    padding: 28,
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
+                  className="feature-card"
+                  style={{ position: "relative", overflow: "hidden" }}
                 >
                   <div
                     style={{
@@ -842,6 +760,153 @@ export default function HomePage() {
           }}
         >
           <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 40 }}>
+              <h2
+                style={{
+                  fontSize: "clamp(22px, 3vw, 32px)",
+                  fontWeight: 800,
+                  color: "var(--text)",
+                  marginBottom: 8,
+                }}
+              >
+                {TOOL_COUNT}+ tools. One place.
+              </h2>
+              <p
+                style={{
+                  fontSize: 14,
+                  color: "var(--text-muted)",
+                  maxWidth: 480,
+                  margin: "0 auto",
+                }}
+              >
+                Everything you need to work with PDFs — free, private, instant.
+                No uploads, no accounts.
+              </p>
+            </div>
+
+            {/* Filter tabs */}
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                justifyContent: "center",
+                marginBottom: 32,
+              }}
+            >
+              {FILTER_TABS.map((tab) => (
+                <button
+                  key={tab}
+                  className={`filter-tab${activeTab === tab ? " active" : ""}`}
+                  onClick={() => setActiveTab(tab)}
+                  aria-pressed={activeTab === tab}
+                >
+                  {tab}
+                  {tab !== "All" && (
+                    <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>
+                      (
+                      {tab === "Convert"
+                        ? TOOL_REGISTRY.filter((t) =>
+                            ["convert-to", "convert-from"].includes(t.category),
+                          ).length
+                        : getToolsByCategory(tab.toLowerCase() as any).length}
+                      )
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div
+              className="home-tool-grid"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
+                gap: 12,
+              }}
+              role="list"
+              aria-label="Available PDF tools"
+            >
+              {visibleTools.map(
+                ({ path, name, icon, color, bg, description }) => (
+                  <Link
+                    key={path}
+                    to={path}
+                    role="listitem"
+                    aria-label={name}
+                    className="tool-card"
+                    style={{ "--tool-color": color } as React.CSSProperties}
+                    onMouseEnter={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.borderColor = color;
+                      el.style.boxShadow = `0 8px 24px ${color}22`;
+                    }}
+                    onMouseLeave={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.borderColor = "var(--border)";
+                      el.style.boxShadow = "none";
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: "var(--radius-md)",
+                        background: bg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 20,
+                      }}
+                    >
+                      {icon}
+                    </div>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: "var(--text)",
+                          marginBottom: 3,
+                        }}
+                      >
+                        {name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "var(--text-muted)",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {description}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        marginTop: "auto",
+                        fontSize: 11,
+                        color,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Open →
+                    </div>
+                  </Link>
+                ),
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Feature highlights ────────────────────────────────────────── */}
+        <section
+          style={{
+            padding: "clamp(48px, 6vw, 80px) 20px",
+            background: "var(--bg)",
+          }}
+        >
+          <div style={{ maxWidth: 1100, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
               <h2
                 style={{
@@ -851,7 +916,7 @@ export default function HomePage() {
                   marginBottom: 8,
                 }}
               >
-                15 tools. One place.
+                Why AuroraPDF?
               </h2>
               <p
                 style={{
@@ -861,132 +926,100 @@ export default function HomePage() {
                   margin: "0 auto",
                 }}
               >
-                Everything you need to work with PDFs — free, private, instant.
-                15 tools, zero uploads.
+                Built different from every other PDF tool out there.
               </p>
             </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <CategoryFilterBar
-                active={activeCategory}
-                onChange={setActiveCategory}
-              />
-            </div>
-
             <div
-              className="home-tool-grid"
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-                gap: 14,
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: 20,
               }}
-              role="list"
-              aria-label="Available tools"
             >
-              {TOOLS.map(({ path, name, icon, color, bg, category }) => {
-                const visible =
-                  activeCategory === "All" ||
-                  category === activeCategory.toLowerCase();
-                return (
-                  <Link
-                    key={path}
-                    to={path}
-                    role="listitem"
-                    aria-label={name}
+              {[
+                {
+                  icon: "🛡",
+                  color: "#00ff88",
+                  title: "Zero server uploads",
+                  desc: "Your files never leave your device. All processing happens in your browser using WebAssembly and pdf-lib.",
+                },
+                {
+                  icon: "⚡",
+                  color: "#f59e0b",
+                  title: "Instant results",
+                  desc: "No queues, no waiting for server processing. Everything runs at native speed directly in your browser.",
+                },
+                {
+                  icon: "🔓",
+                  color: "#00ccff",
+                  title: "No account required",
+                  desc: "Open a tool, use it, download your file. No sign-up, no email, no subscription — ever.",
+                },
+                {
+                  icon: "📱",
+                  color: "#7c3aed",
+                  title: "Works offline",
+                  desc: "Install as a PWA and use all tools without an internet connection. Your data stays on your device.",
+                },
+                {
+                  icon: "🔒",
+                  color: "#ef4444",
+                  title: "Open source",
+                  desc: "Full source code on GitHub. Audit it, fork it, contribute to it. No black boxes.",
+                },
+                {
+                  icon: "🌍",
+                  color: "#4ade80",
+                  title: "Free forever",
+                  desc: "No freemium tricks, no file size limits, no watermarks. Every tool is completely free.",
+                },
+              ].map(({ icon, color, title, desc }) => (
+                <div key={title} className="feature-card">
+                  <div
                     style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: "var(--radius-md)",
+                      background: `${color}18`,
                       display: "flex",
-                      flexDirection: "column",
-                      gap: 10,
-                      background: "var(--bg)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "var(--radius-lg)",
-                      padding: 20,
-                      textDecoration: "none",
-                      transition: "all 0.2s, opacity 0.2s, transform 0.2s",
-                      opacity: visible ? 1 : 0,
-                      transform: visible ? "scale(1)" : "scale(0.95)",
-                      pointerEvents: visible ? "auto" : "none",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!visible) return;
-                      (e.currentTarget as HTMLElement).style.borderColor =
-                        color;
-                      (e.currentTarget as HTMLElement).style.transform =
-                        "translateY(-2px)";
-                      (
-                        e.currentTarget as HTMLElement
-                      ).style.boxShadow = `0 8px 24px ${color}22`;
-                      (e.currentTarget as HTMLElement).style.background =
-                        "var(--surface)";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.borderColor =
-                        "var(--border)";
-                      (e.currentTarget as HTMLElement).style.transform = visible
-                        ? "scale(1)"
-                        : "scale(0.95)";
-                      (e.currentTarget as HTMLElement).style.boxShadow = "none";
-                      (e.currentTarget as HTMLElement).style.background =
-                        "var(--bg)";
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 22,
+                      marginBottom: 14,
                     }}
                   >
-                    <div
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: "var(--radius-md)",
-                        background: bg,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 22,
-                      }}
-                    >
-                      {icon}
-                    </div>
-                    <div>
-                      <div
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 700,
-                          color: "var(--text)",
-                          marginBottom: 4,
-                        }}
-                      >
-                        {name}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: "var(--text-muted)",
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {TOOL_DESCRIPTIONS[name] ?? ""}
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        marginTop: "auto",
-                        fontSize: 12,
-                        color,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Open tool →
-                    </div>
-                  </Link>
-                );
-              })}
+                    {icon}
+                  </div>
+                  <h3
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 700,
+                      color: "var(--text)",
+                      marginBottom: 8,
+                    }}
+                  >
+                    {title}
+                  </h3>
+                  <p
+                    style={{
+                      fontSize: 13,
+                      color: "var(--text-muted)",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {desc}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        {/* ── Privacy section ───────────────────────────────────────────── */}
+        {/* ── Privacy CTA ───────────────────────────────────────────────── */}
         <section
           style={{
             padding: "clamp(48px, 6vw, 80px) 20px",
-            background: "var(--bg)",
+            background: "var(--surface)",
           }}
         >
           <div
@@ -1003,7 +1036,6 @@ export default function HomePage() {
               overflow: "hidden",
             }}
           >
-            {/* Background glow */}
             <div
               style={{
                 position: "absolute",
@@ -1017,7 +1049,6 @@ export default function HomePage() {
                 pointerEvents: "none",
               }}
             />
-
             <div style={{ fontSize: 48, marginBottom: 16 }}>🛡</div>
             <h2
               style={{
@@ -1046,7 +1077,7 @@ export default function HomePage() {
               style={{
                 display: "flex",
                 justifyContent: "center",
-                gap: 16,
+                gap: 12,
                 flexWrap: "wrap",
               }}
             >
@@ -1054,7 +1085,7 @@ export default function HomePage() {
                 { icon: "🚫", text: "No server uploads" },
                 { icon: "🔒", text: "No data storage" },
                 { icon: "👤", text: "No accounts" },
-                { icon: "📊", text: "No analytics on files" },
+                { icon: "📊", text: "No file analytics" },
               ].map(({ icon, text }) => (
                 <div
                   key={text}

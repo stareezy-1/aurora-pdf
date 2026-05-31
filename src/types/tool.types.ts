@@ -1,19 +1,34 @@
 export type CompressionLevel = "low" | "standard" | "high";
 export type OcrLanguage = string; // Tesseract.js language code
-export type WatermarkPlacement = "diagonal" | "header" | "footer";
+export type WatermarkPlacement =
+  | "center"
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
 export type SignatureMethod = "draw" | "type" | "upload";
 export type DpiOption = 150 | 300;
 export type PageSize = "A4" | "Letter" | "Legal";
 export type Orientation = "portrait" | "landscape";
 
 export interface WatermarkConfig {
-  text: string; // 1–100 chars
-  fontSize: number; // 8–144
-  opacity: number; // 10–100 (percent)
-  color: string; // hex color string
-  rotation: number; // 0–360 degrees
-  placement: WatermarkPlacement;
-  fontFamily: string; // font family name
+  type: "text" | "image";
+  // Text watermark
+  text?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  color?: string;
+  // Image watermark
+  imageDataUrl?: string;
+  // Shared
+  opacity: number; // 5–100
+  rotation: number; // 0–360
+  placement: WatermarkPlacement | "custom";
+  customX?: number; // 0–100 percent
+  customY?: number;
+  tile: boolean;
+  layer: "foreground" | "background";
+  pageRange: string; // '' = all pages
 }
 
 export interface SignatureConfig {
@@ -68,13 +83,17 @@ export const defaultToolConfig: ToolConfig = {
   ocrLanguage: "eng",
   dpi: 150,
   watermark: {
+    type: "text",
     text: "CONFIDENTIAL",
     fontSize: 48,
     opacity: 50,
     color: "#000000",
     rotation: 45,
-    placement: "diagonal",
+    placement: "center",
     fontFamily: "Helvetica",
+    tile: false,
+    layer: "foreground",
+    pageRange: "",
   },
   signature: {
     method: "draw",
@@ -93,3 +112,58 @@ export const defaultToolConfig: ToolConfig = {
   editHistory: [],
   editHistoryIndex: -1,
 };
+
+// ---------------------------------------------------------------------------
+// New types for P1 engines
+// ---------------------------------------------------------------------------
+
+export interface SignaturePlacement {
+  dataUrl: string;
+  pageIndex: number;
+  x: number; // PDF points
+  y: number; // PDF points (bottom-up)
+  width: number;
+  height: number;
+  opacity: number; // 10–100
+  rotation: number; // 0–360
+}
+
+export interface SavedSignature {
+  id: string;
+  name: string;
+  dataUrl: string;
+  createdAt: number;
+}
+
+export interface CropConfig {
+  top: number; // points
+  right: number;
+  bottom: number;
+  left: number;
+  pageRange: string;
+}
+
+export interface HeaderFooterConfig {
+  headerLeft: string;
+  headerCenter: string;
+  headerRight: string;
+  footerLeft: string;
+  footerCenter: string;
+  footerRight: string;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  marginOffset: number; // points
+  pageRange: string;
+}
+
+export interface BatchFile {
+  id: string;
+  file: File;
+  status: "pending" | "processing" | "done" | "error";
+  progress: number;
+  resultBlobUrl: string | null;
+  errorMessage: string | null;
+  originalSize: number;
+  compressedSize: number | null;
+}

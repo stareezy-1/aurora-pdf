@@ -14,6 +14,7 @@ import {
   applyWatermark,
   embedImageOverlay,
 } from "@/engines/pdf-engine";
+import { applyEdits } from "@/engines/edit-engine";
 import { recognizeWithBoundingBoxes } from "@/engines/ocr-engine";
 import { buildOutputFilename } from "@/lib/filename-utils";
 import type { TextAnnotation, ShapeAnnotation } from "@/types/engine.types";
@@ -31,11 +32,15 @@ export type Tool =
   | "draw"
   | "shape"
   | "ocr-edit"
-  | "page-numbers";
+  | "page-numbers"
+  | "highlight"
+  | "underline"
+  | "strikethrough"
+  | "note";
 
 export interface Overlay {
   id: string;
-  type: "text" | "image";
+  type: "text" | "image" | "annotation" | "note";
   pageIndex: number;
   x: number;
   y: number;
@@ -48,6 +53,8 @@ export interface Overlay {
   rotation?: number; // degrees — used by watermark overlays
   opacity?: number; // 0–100 — used by watermark overlays
   dataUrl?: string;
+  // annotation-specific
+  annotationType?: "highlight" | "underline" | "strikethrough";
 }
 
 /** A full snapshot of the editor state — pushed before every mutation */
@@ -139,9 +146,9 @@ export function useEditPdf() {
   const drawLastPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Shape tool
-  const [shapeType, setShapeType] = useState<"rectangle" | "circle" | "line">(
-    "rectangle",
-  );
+  const [shapeType, setShapeType] = useState<
+    "rectangle" | "circle" | "line" | "arrow"
+  >("rectangle");
   const [shapeStrokeColor, setShapeStrokeColor] = useState("#ff0000");
   const [shapeFillColor, setShapeFillColor] = useState<string | null>(null);
   const [shapeStrokeWidth, setShapeStrokeWidth] = useState(2);
@@ -152,6 +159,12 @@ export function useEditPdf() {
     width: number;
     height: number;
   } | null>(null);
+
+  // Annotation tools (highlight, underline, strikethrough, note)
+  const [annotationColor, setAnnotationColor] = useState("#FFFF00");
+  const [annotationOpacity, setAnnotationOpacity] = useState(50);
+  const [noteText, setNoteText] = useState("Note");
+  const [noteColor, setNoteColor] = useState("#FFFF88");
 
   // Page Numbers tool
   const [pageNumPosition, setPageNumPosition] =
@@ -423,6 +436,51 @@ export function useEditPdf() {
     const y = (e.clientY - rect.top) / zoom;
     const id = `${Date.now()}`;
 
+    if (
+      activeTool === "highlight" ||
+      activeTool === "underline" ||
+      activeTool === "strikethrough"
+    ) {
+      pushOverlayUndo(overlays);
+      setOverlays((prev) => [
+        ...prev,
+        {
+          id,
+          type: "annotation",
+          annotationType: activeTool,
+          pageIndex: currentPage,
+          x,
+          y,
+          width: 200,
+          height: activeTool === "highlight" ? 20 : 4,
+          color: annotationColor,
+          opacity: annotationOpacity,
+        },
+      ]);
+      setSelectedId(id);
+      return;
+    }
+    if (activeTool === "note") {
+      pushOverlayUndo(overlays);
+      setOverlays((prev) => [
+        ...prev,
+        {
+          id,
+          type: "note",
+          pageIndex: currentPage,
+          x,
+          y,
+          width: 160,
+          height: 80,
+          text: noteText,
+          color: noteColor,
+          fontSize: 11,
+        },
+      ]);
+      setSelectedId(id);
+      return;
+    }
+
     if (activeTool === "shape") {
       setPendingShape({ x: x - 60, y: y - 40, width: 120, height: 80 });
       return;
@@ -485,13 +543,17 @@ export function useEditPdf() {
       applyWatermark(
         pdfBytes,
         {
+          type: "text",
           text: wmText,
           fontSize: 48,
           opacity: wmOpacity,
           color: wmColor,
           rotation: wmRotation,
-          placement: "diagonal",
+          placement: "center",
           fontFamily: "Helvetica",
+          tile: false,
+          layer: "foreground",
+          pageRange: "",
         },
         () => {},
       )
@@ -965,6 +1027,36 @@ export function useEditPdf() {
             width: (ovW * scaleX) / pageW,
             height: (ovH * scaleY) / pageH,
           });
+        } else if (ov.type === "annotation" && ov.annotationType) {
+          // Highlight, underline, strikethrough — use edit-engine's applyEdits
+          bytes = await applyEdits(bytes, [
+            {
+              kind: "annotation",
+              id: ov.id,
+              pageIndex: ov.pageIndex,
+              annotationType: ov.annotationType,
+              x: ovX * scaleX,
+              y: pageH - (ovY + ovH) * scaleY,
+              width: ovW * scaleX,
+              height: ovH * scaleY,
+              color: ov.color ?? "#FFFF00",
+              opacity: ov.opacity,
+            },
+          ]);
+        } else if (ov.type === "note" && ov.text) {
+          // Sticky note — use edit-engine's applyEdits
+          bytes = await applyEdits(bytes, [
+            {
+              kind: "note",
+              id: ov.id,
+              pageIndex: ov.pageIndex,
+              x: ovX * scaleX,
+              y: pageH - (ovY + ovH) * scaleY,
+              text: ov.text,
+              color: ov.color ?? "#FFFF88",
+              fontSize: (ov.fontSize ?? 11) / zoom,
+            },
+          ]);
         }
       }
 
@@ -1269,5 +1361,14 @@ export function useEditPdf() {
     hoveredThumbIndex,
     handleThumbMouseEnter,
     handleThumbMouseLeave,
+    // Annotation tools
+    annotationColor,
+    setAnnotationColor,
+    annotationOpacity,
+    setAnnotationOpacity,
+    noteText,
+    setNoteText,
+    noteColor,
+    setNoteColor,
   };
 }

@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+// Requirements: 4.1–4.10
+import { useEffect, useState } from "react";
 import { ToolLayout } from "@/components/ToolLayout/ToolLayout";
 import { FileDropZone } from "@/components/FileDropZone/FileDropZone";
 import { ProgressPanel } from "@/components/ProgressPanel/ProgressPanel";
@@ -6,23 +7,13 @@ import { PrivacyShield } from "@/components/PrivacyShield/PrivacyShield";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useAuroraStore } from "@/stores/aurora.store";
 import { useDragOverlay } from "@/hooks/useDragOverlay";
-import { useSignPdf, SIGNATURE_FONTS } from "./hooks/useSignPdf";
+import {
+  useSignPdf,
+  SIGNATURE_FONTS,
+  SIGNATURE_FONTS_URL,
+} from "./hooks/useSignPdf";
 import type { SignatureMethod } from "@/types/tool.types";
 import type { SigOverlay } from "./hooks/useSignPdf";
-
-// Load Google Fonts for signature type mode
-const GOOGLE_FONTS_URL =
-  "https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Pacifico&family=Great+Vibes&display=swap";
-
-function useGoogleFonts() {
-  useEffect(() => {
-    if (document.querySelector(`link[href="${GOOGLE_FONTS_URL}"]`)) return;
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = GOOGLE_FONTS_URL;
-    document.head.appendChild(link);
-  }, []);
-}
 
 const PDF_ACCEPT = [{ mime: "application/pdf", extension: ".pdf" }];
 const SIG_IMG_ACCEPT = [
@@ -30,22 +21,40 @@ const SIG_IMG_ACCEPT = [
   { mime: "image/jpeg", extension: ".jpg" },
 ];
 
-// ── SignatureOverlay sub-component ───────────────────────────────────────────
-// Hooks (useDragOverlay) must be called at component level, not inside render.
+function useGoogleFonts() {
+  useEffect(() => {
+    if (document.querySelector(`link[href="${SIGNATURE_FONTS_URL}"]`)) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = SIGNATURE_FONTS_URL;
+    document.head.appendChild(link);
+  }, []);
+}
+
+// ── SignatureOverlay ──────────────────────────────────────────────────────────
+
 interface SignatureOverlayProps {
   overlay: SigOverlay;
-  sigDataUrl: string;
-  beginOverlayDrag: (e: React.MouseEvent | React.TouchEvent) => void;
+  isSelected: boolean;
+  onSelect: () => void;
+  beginOverlayDrag: (
+    e: React.MouseEvent | React.TouchEvent,
+    id: string,
+  ) => void;
   moveOverlayDrag: (delta: { dx: number; dy: number }) => void;
   endOverlayDrag: () => void;
-  beginOverlayResize: (e: React.MouseEvent | React.TouchEvent) => void;
+  beginOverlayResize: (
+    e: React.MouseEvent | React.TouchEvent,
+    id: string,
+  ) => void;
   moveOverlayResize: (delta: { dx: number; dy: number }) => void;
   endOverlayResize: () => void;
 }
 
 function SignatureOverlay({
   overlay,
-  sigDataUrl,
+  isSelected,
+  onSelect,
   beginOverlayDrag,
   moveOverlayDrag,
   endOverlayDrag,
@@ -57,48 +66,35 @@ function SignatureOverlay({
     onDrag: moveOverlayDrag,
     onDragEnd: endOverlayDrag,
   });
-
   const resizeHandlers = useDragOverlay({
     onDrag: moveOverlayResize,
     onDragEnd: endOverlayResize,
   });
 
-  function handleDragMouseDown(e: React.MouseEvent) {
-    beginOverlayDrag(e);
-    dragHandlers.onMouseDown(e);
-  }
-
-  function handleDragTouchStart(e: React.TouchEvent) {
-    beginOverlayDrag(e);
-    dragHandlers.onTouchStart(e);
-  }
-
-  function handleResizeMouseDown(e: React.MouseEvent) {
-    e.stopPropagation();
-    beginOverlayResize(e);
-    resizeHandlers.onMouseDown(e);
-  }
-
-  function handleResizeTouchStart(e: React.TouchEvent) {
-    e.stopPropagation();
-    beginOverlayResize(e);
-    resizeHandlers.onTouchStart(e);
-  }
-
   return (
     <div
-      className="editor-overlay-item selected"
+      className={`editor-overlay-item${isSelected ? " selected" : ""}`}
       style={{
         left: overlay.x,
         top: overlay.y,
         width: overlay.width,
         height: overlay.height,
+        transform: `rotate(${overlay.rotation}deg)`,
+        opacity: overlay.opacity / 100,
       }}
-      onMouseDown={handleDragMouseDown}
-      onTouchStart={handleDragTouchStart}
+      onMouseDown={(e) => {
+        onSelect();
+        beginOverlayDrag(e, overlay.id);
+        dragHandlers.onMouseDown(e);
+      }}
+      onTouchStart={(e) => {
+        onSelect();
+        beginOverlayDrag(e, overlay.id);
+        dragHandlers.onTouchStart(e);
+      }}
     >
       <img
-        src={sigDataUrl}
+        src={overlay.dataUrl}
         alt="Signature overlay"
         style={{
           width: "100%",
@@ -110,24 +106,153 @@ function SignatureOverlay({
       />
       <div
         className="resize-handle"
-        onMouseDown={handleResizeMouseDown}
-        onTouchStart={handleResizeTouchStart}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          beginOverlayResize(e, overlay.id);
+          resizeHandlers.onMouseDown(e);
+        }}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          beginOverlayResize(e, overlay.id);
+          resizeHandlers.onTouchStart(e);
+        }}
       />
     </div>
   );
 }
+
+// ── SavedSigItem ──────────────────────────────────────────────────────────────
+
+interface SavedSigItemProps {
+  name: string;
+  dataUrl: string;
+  onSelect: () => void;
+  onDelete: () => void;
+  onRename: (name: string) => void;
+}
+
+function SavedSigItem({
+  name,
+  dataUrl,
+  onSelect,
+  onDelete,
+  onRename,
+}: SavedSigItemProps) {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(name);
+
+  function commitRename() {
+    const trimmed = editName.trim();
+    if (trimmed && trimmed !== name) onRename(trimmed);
+    setEditing(false);
+  }
+
+  return (
+    <div
+      className="card-sm"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 8px",
+      }}
+    >
+      <img
+        src={dataUrl}
+        alt={name}
+        style={{
+          width: 60,
+          height: 28,
+          objectFit: "contain",
+          background: "#fff",
+          borderRadius: 3,
+          padding: 2,
+          cursor: "pointer",
+          flexShrink: 0,
+        }}
+        onClick={onSelect}
+        title="Use this signature"
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {editing ? (
+          <input
+            className="input-field"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            autoFocus
+            style={{ fontSize: 12, padding: "2px 6px" }}
+            aria-label={`Rename signature ${name}`}
+          />
+        ) : (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+            }}
+            onClick={() => setEditing(true)}
+            title="Click to rename"
+          >
+            {name}
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+        <button
+          className="btn btn-secondary btn-sm"
+          style={{ padding: "2px 6px", fontSize: 11 }}
+          onClick={onSelect}
+          aria-label={`Use signature ${name}`}
+        >
+          Use
+        </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          style={{ padding: "2px 6px", fontSize: 11 }}
+          onClick={() => setEditing(true)}
+          aria-label={`Rename signature ${name}`}
+        >
+          ✏️
+        </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          style={{
+            padding: "2px 6px",
+            fontSize: 11,
+            color: "var(--red, #e55)",
+          }}
+          onClick={onDelete}
+          aria-label={`Delete signature ${name}`}
+        >
+          🗑️
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SignPdfPage() {
   usePageTitle("Sign PDF");
   useGoogleFonts();
   const vm = useSignPdf();
 
+  // Drop-zone / progress / success screen
   if (!vm.pdfFile || vm.status !== "idle") {
     return (
       <ToolLayout toolName="Sign PDF">
         <div className="tool-header">
           <h1>✍️ Sign PDF</h1>
-          <p>Add a digital signature to any page. Draw, type, or upload.</p>
+          <p>Add one or more signatures to any page. Draw, type, or upload.</p>
         </div>
         {vm.status === "idle" && (
           <FileDropZone
@@ -160,13 +285,17 @@ export default function SignPdfPage() {
     );
   }
 
+  const selectedOverlay = vm.selectedOverlay;
+
   return (
     <ToolLayout toolName="Sign PDF" wide>
       <div className="editor-shell">
-        {/* Sidebar */}
+        {/* ── Sidebar ── */}
         <aside className="editor-sidebar">
           <div className="editor-sidebar-header">✍️ Sign PDF</div>
+
           <div className="editor-sidebar-body">
+            {/* File info */}
             <div className="file-info-strip">
               <span className="file-icon">📄</span>
               <div>
@@ -177,9 +306,10 @@ export default function SignPdfPage() {
               </div>
             </div>
 
+            {/* Page selector */}
             <div>
               <label className="label" htmlFor="page-select">
-                Sign page
+                Page to sign
               </label>
               <select
                 id="page-select"
@@ -196,6 +326,7 @@ export default function SignPdfPage() {
               </select>
             </div>
 
+            {/* Signature method tabs */}
             <div>
               <label className="label">Signature method</label>
               <div className="tab-group">
@@ -217,6 +348,7 @@ export default function SignPdfPage() {
               </div>
             </div>
 
+            {/* Draw method */}
             {vm.method === "draw" && (
               <div>
                 <canvas
@@ -241,6 +373,7 @@ export default function SignPdfPage() {
               </div>
             )}
 
+            {/* Type method */}
             {vm.method === "type" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <canvas
@@ -302,6 +435,7 @@ export default function SignPdfPage() {
               </div>
             )}
 
+            {/* Upload method */}
             {vm.method === "upload" && (
               <div>
                 <p
@@ -323,35 +457,7 @@ export default function SignPdfPage() {
               </div>
             )}
 
-            {/* Use previous signature */}
-            {vm.savedSigDataUrl && !vm.sigDataUrl && (
-              <div
-                className="card-sm"
-                style={{ display: "flex", flexDirection: "column", gap: 8 }}
-              >
-                <div className="label">Previous signature</div>
-                <img
-                  src={vm.savedSigDataUrl}
-                  alt="Saved signature"
-                  style={{
-                    maxWidth: "100%",
-                    maxHeight: 50,
-                    background: "#fff",
-                    borderRadius: 4,
-                    padding: 4,
-                    objectFit: "contain",
-                  }}
-                />
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={vm.loadSavedSignature}
-                  aria-label="Use previous signature"
-                >
-                  Use previous signature
-                </button>
-              </div>
-            )}
-
+            {/* Signature preview + place button */}
             {vm.sigDataUrl && (
               <div className="card-sm">
                 <div className="label" style={{ marginBottom: 6 }}>
@@ -368,15 +474,175 @@ export default function SignPdfPage() {
                     padding: 4,
                   }}
                 />
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: "var(--text-muted)",
-                    marginTop: 6,
-                  }}
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={vm.placeSignature}
+                  style={{ marginTop: 8, width: "100%" }}
+                  aria-label="Place signature on page"
                 >
-                  Drag the overlay on the page to reposition
-                </p>
+                  + Place on page {vm.pageIndex + 1}
+                </button>
+              </div>
+            )}
+
+            {/* Saved signatures panel */}
+            {vm.savedSignatures.length > 0 && (
+              <div>
+                <div className="label" style={{ marginBottom: 6 }}>
+                  Saved signatures ({vm.savedSignatures.length}/5)
+                </div>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  {vm.savedSignatures.map((sig) => (
+                    <SavedSigItem
+                      key={sig.id}
+                      name={sig.name}
+                      dataUrl={sig.dataUrl}
+                      onSelect={() => vm.loadSavedSig(sig)}
+                      onDelete={() => vm.handleDeleteSavedSig(sig.id)}
+                      onRename={(n) => vm.handleRenameSavedSig(sig.id, n)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Placed overlays list */}
+            {vm.overlays.length > 0 && (
+              <div>
+                <div className="label" style={{ marginBottom: 6 }}>
+                  Placed signatures ({vm.overlays.length})
+                </div>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  {vm.overlays.map((ov, idx) => (
+                    <div
+                      key={ov.id}
+                      className="card-sm"
+                      style={{
+                        padding: "6px 8px",
+                        cursor: "pointer",
+                        border:
+                          vm.selectedOverlayId === ov.id
+                            ? "1px solid var(--green)"
+                            : undefined,
+                      }}
+                      onClick={() => {
+                        vm.setSelectedOverlayId(ov.id);
+                        vm.setPageIndex(ov.pageIndex);
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <span style={{ fontSize: 12, color: "var(--text)" }}>
+                          Sig {idx + 1} — Page {ov.pageIndex + 1}
+                        </span>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          style={{
+                            padding: "1px 5px",
+                            fontSize: 11,
+                            color: "var(--red, #e55)",
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            vm.removeOverlay(ov.id);
+                          }}
+                          aria-label={`Remove signature ${idx + 1}`}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <img
+                        src={ov.dataUrl}
+                        alt={`Signature ${idx + 1}`}
+                        style={{
+                          width: "100%",
+                          maxHeight: 36,
+                          objectFit: "contain",
+                          background: "#fff",
+                          borderRadius: 3,
+                          padding: 2,
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Per-overlay controls: opacity + rotation */}
+            {selectedOverlay && (
+              <div
+                className="card-sm"
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <div className="label">
+                  Signature{" "}
+                  {vm.overlays.findIndex((o) => o.id === selectedOverlay.id) +
+                    1}{" "}
+                  controls
+                </div>
+
+                <div>
+                  <label
+                    className="label"
+                    htmlFor={`opacity-${selectedOverlay.id}`}
+                    style={{ marginBottom: 4 }}
+                  >
+                    Opacity: {selectedOverlay.opacity}%
+                  </label>
+                  <input
+                    id={`opacity-${selectedOverlay.id}`}
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={1}
+                    value={selectedOverlay.opacity}
+                    onChange={(e) =>
+                      vm.setOverlayOpacity(
+                        selectedOverlay.id,
+                        Number(e.target.value),
+                      )
+                    }
+                    style={{ width: "100%" }}
+                    aria-label="Signature opacity"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    className="label"
+                    htmlFor={`rotation-${selectedOverlay.id}`}
+                    style={{ marginBottom: 4 }}
+                  >
+                    Rotation: {selectedOverlay.rotation}°
+                  </label>
+                  <input
+                    id={`rotation-${selectedOverlay.id}`}
+                    type="range"
+                    min={0}
+                    max={360}
+                    step={1}
+                    value={selectedOverlay.rotation}
+                    onChange={(e) =>
+                      vm.setOverlayRotation(
+                        selectedOverlay.id,
+                        Number(e.target.value),
+                      )
+                    }
+                    style={{ width: "100%" }}
+                    aria-label="Signature rotation"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -384,11 +650,12 @@ export default function SignPdfPage() {
           <div className="editor-sidebar-footer">
             <button
               className="btn btn-primary"
-              onClick={() => vm.pdfFile && vm.processor.run(vm.pdfFile)}
-              disabled={!vm.sigDataUrl}
-              aria-label="Apply signature"
+              onClick={vm.handleApply}
+              disabled={vm.overlays.length === 0}
+              aria-label="Apply all signatures"
             >
-              Apply Signature
+              Apply {vm.overlays.length > 0 ? `${vm.overlays.length} ` : ""}
+              Signature{vm.overlays.length !== 1 ? "s" : ""}
             </button>
             <button
               className="btn btn-secondary btn-sm"
@@ -399,15 +666,21 @@ export default function SignPdfPage() {
           </div>
         </aside>
 
-        {/* Canvas */}
+        {/* ── Canvas ── */}
         <div className="editor-canvas">
           <div className="editor-canvas-toolbar">
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
               Page {vm.pageIndex + 1} of {vm.pageCount}
             </span>
-            {vm.sigDataUrl && (
+            {vm.currentPageOverlays.length > 0 && (
               <span style={{ fontSize: 12, color: "var(--green)" }}>
-                ✓ Signature ready — drag to reposition
+                ✓ {vm.currentPageOverlays.length} signature
+                {vm.currentPageOverlays.length !== 1 ? "s" : ""} on this page
+              </span>
+            )}
+            {vm.sigDataUrl && vm.currentPageOverlays.length === 0 && (
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                Click "+ Place on page" to add the signature
               </span>
             )}
           </div>
@@ -420,10 +693,12 @@ export default function SignPdfPage() {
                 style={{ display: "block", maxWidth: "min(860px, 100%)" }}
                 draggable={false}
               />
-              {vm.sigDataUrl && (
+              {vm.currentPageOverlays.map((ov) => (
                 <SignatureOverlay
-                  overlay={vm.overlay}
-                  sigDataUrl={vm.sigDataUrl}
+                  key={ov.id}
+                  overlay={ov}
+                  isSelected={vm.selectedOverlayId === ov.id}
+                  onSelect={() => vm.setSelectedOverlayId(ov.id)}
                   beginOverlayDrag={vm.beginOverlayDrag}
                   moveOverlayDrag={vm.moveOverlayDrag}
                   endOverlayDrag={vm.endOverlayDrag}
@@ -431,13 +706,13 @@ export default function SignPdfPage() {
                   moveOverlayResize={vm.moveOverlayResize}
                   endOverlayResize={vm.endOverlayResize}
                 />
-              )}
+              ))}
             </div>
           ) : (
             <div
               style={{ color: "var(--text-muted)", fontSize: 14, padding: 60 }}
             >
-              Loading preview…
+              {vm.isLoading ? "Loading preview…" : "No preview available."}
             </div>
           )}
         </div>

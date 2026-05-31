@@ -621,6 +621,38 @@ export async function applyShapeOverlay(
       color: strokeColor,
       thickness: borderWidth,
     });
+  } else if (shape.type === "arrow") {
+    const endX = shape.x + shape.width;
+    const endY = shape.y + shape.height;
+    // Main line
+    page.drawLine({
+      start: { x: shape.x, y: shape.y },
+      end: { x: endX, y: endY },
+      color: strokeColor,
+      thickness: borderWidth,
+    });
+    // Arrowhead — two lines at 30° from the end
+    const angle = Math.atan2(shape.height, shape.width);
+    const arrowLen = Math.max(borderWidth * 4, 10);
+    const arrowAngle = Math.PI / 6;
+    page.drawLine({
+      start: { x: endX, y: endY },
+      end: {
+        x: endX - arrowLen * Math.cos(angle - arrowAngle),
+        y: endY - arrowLen * Math.sin(angle - arrowAngle),
+      },
+      color: strokeColor,
+      thickness: borderWidth,
+    });
+    page.drawLine({
+      start: { x: endX, y: endY },
+      end: {
+        x: endX - arrowLen * Math.cos(angle + arrowAngle),
+        y: endY - arrowLen * Math.sin(angle + arrowAngle),
+      },
+      color: strokeColor,
+      thickness: borderWidth,
+    });
   }
   return pdfDoc.save();
 }

@@ -22,6 +22,10 @@ const TOOL_BUTTONS: { id: Tool; label: string; icon: string }[] = [
   { id: "watermark", label: "Watermark", icon: "💧" },
   { id: "draw", label: "Draw", icon: "✏" },
   { id: "shape", label: "Shape", icon: "⬜" },
+  { id: "highlight", label: "Highlight", icon: "🖊" },
+  { id: "underline", label: "Underline", icon: "U̲" },
+  { id: "strikethrough", label: "Strike", icon: "S̶" },
+  { id: "note", label: "Note", icon: "📝" },
   { id: "ocr-edit", label: "OCR Edit", icon: "🔍" },
   { id: "page-numbers", label: "Page #", icon: "🔢" },
 ];
@@ -200,13 +204,43 @@ function PendingShapeOverlay({ vm }: { vm: EditPdfVm }) {
         </svg>
       );
     }
-    // line
+    if (s === "line") {
+      return (
+        <svg
+          width="100%"
+          height="100%"
+          style={{ position: "absolute", inset: 0, overflow: "visible" }}
+        >
+          <line
+            x1="0"
+            y1="0"
+            x2="100%"
+            y2="100%"
+            stroke={stroke}
+            strokeWidth={sw}
+          />
+        </svg>
+      );
+    }
+    // arrow
     return (
       <svg
         width="100%"
         height="100%"
         style={{ position: "absolute", inset: 0, overflow: "visible" }}
       >
+        <defs>
+          <marker
+            id="arrowhead-preview"
+            markerWidth="6"
+            markerHeight="6"
+            refX="5"
+            refY="3"
+            orient="auto"
+          >
+            <path d="M0,0 L0,6 L6,3 z" fill={stroke} />
+          </marker>
+        </defs>
         <line
           x1="0"
           y1="0"
@@ -214,6 +248,7 @@ function PendingShapeOverlay({ vm }: { vm: EditPdfVm }) {
           y2="100%"
           stroke={stroke}
           strokeWidth={sw}
+          markerEnd="url(#arrowhead-preview)"
         />
       </svg>
     );
@@ -404,6 +439,74 @@ function OverlayItem({
           }}
           draggable={false}
         />
+      )}
+      {ov.type === "annotation" && ov.annotationType === "highlight" && (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            background: ov.color ?? "#FFFF00",
+            opacity: (ov.opacity ?? 50) / 100,
+            pointerEvents: "none",
+            borderRadius: 2,
+          }}
+        />
+      )}
+      {ov.type === "annotation" && ov.annotationType === "underline" && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: Math.max(2, ov.height * zoom * 0.08),
+            background: ov.color ?? "#000000",
+            opacity: (ov.opacity ?? 100) / 100,
+            pointerEvents: "none",
+          }}
+        />
+      )}
+      {ov.type === "annotation" && ov.annotationType === "strikethrough" && (
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: 0,
+            right: 0,
+            height: Math.max(2, ov.height * zoom * 0.08),
+            background: ov.color ?? "#000000",
+            opacity: (ov.opacity ?? 100) / 100,
+            transform: "translateY(-50%)",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+      {ov.type === "note" && (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            background: ov.color ?? "#FFFF88",
+            border: "1px solid rgba(0,0,0,0.2)",
+            borderRadius: 3,
+            padding: "4px 6px",
+            boxSizing: "border-box",
+            overflow: "hidden",
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              fontSize: (ov.fontSize ?? 11) * zoom,
+              color: "#333",
+              lineHeight: 1.3,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {ov.text}
+          </div>
+        </div>
       )}
       {isSelected && (
         <div
@@ -938,35 +1041,37 @@ export default function EditPdfPage() {
               >
                 <div>
                   <div className="label">Shape type</div>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    {(["rectangle", "circle", "line"] as const).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => vm.setShapeType(t)}
-                        aria-pressed={vm.shapeType === t}
-                        style={{
-                          flex: 1,
-                          padding: "5px 4px",
-                          borderRadius: "var(--radius-sm)",
-                          border: "1px solid var(--border)",
-                          background:
-                            vm.shapeType === t
-                              ? "rgba(0,255,136,0.12)"
-                              : "var(--surface-2)",
-                          color:
-                            vm.shapeType === t
-                              ? "var(--green)"
-                              : "var(--text-2)",
-                          cursor: "pointer",
-                          fontSize: 11,
-                          fontWeight: 600,
-                          fontFamily: "var(--font)",
-                          textTransform: "capitalize",
-                        }}
-                      >
-                        {t}
-                      </button>
-                    ))}
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {(["rectangle", "circle", "line", "arrow"] as const).map(
+                      (t) => (
+                        <button
+                          key={t}
+                          onClick={() => vm.setShapeType(t)}
+                          aria-pressed={vm.shapeType === t}
+                          style={{
+                            flex: 1,
+                            padding: "5px 4px",
+                            borderRadius: "var(--radius-sm)",
+                            border: "1px solid var(--border)",
+                            background:
+                              vm.shapeType === t
+                                ? "rgba(0,255,136,0.12)"
+                                : "var(--surface-2)",
+                            color:
+                              vm.shapeType === t
+                                ? "var(--green)"
+                                : "var(--text-2)",
+                            cursor: "pointer",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            fontFamily: "var(--font)",
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          {t}
+                        </button>
+                      ),
+                    )}
                   </div>
                 </div>
                 <div
@@ -1074,6 +1179,170 @@ export default function EditPdfPage() {
                     ✓ Commit Shape
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* ── Highlight options ── */}
+            {vm.activeTool === "highlight" && (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <div
+                  style={{ display: "flex", gap: 10, alignItems: "flex-end" }}
+                >
+                  <div>
+                    <label className="label" htmlFor="highlight-color">
+                      Color
+                    </label>
+                    <input
+                      id="highlight-color"
+                      type="color"
+                      value={vm.annotationColor}
+                      onChange={(e) => vm.setAnnotationColor(e.target.value)}
+                      style={{
+                        width: 40,
+                        height: 32,
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-sm)",
+                        cursor: "pointer",
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="label">
+                      Opacity:{" "}
+                      <span style={{ color: "var(--green)" }}>
+                        {vm.annotationOpacity}%
+                      </span>
+                    </label>
+                    <div className="slider-wrap">
+                      <input
+                        type="range"
+                        min={10}
+                        max={100}
+                        value={vm.annotationOpacity}
+                        onChange={(e) =>
+                          vm.setAnnotationOpacity(Number(e.target.value))
+                        }
+                        aria-label="Highlight opacity"
+                      />
+                      <span className="slider-val">
+                        {vm.annotationOpacity}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="alert alert-info" style={{ fontSize: 12 }}>
+                  Click on the page to place a highlight region, then drag to
+                  resize
+                </div>
+              </div>
+            )}
+
+            {/* ── Underline options ── */}
+            {vm.activeTool === "underline" && (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <div>
+                  <label className="label" htmlFor="underline-color">
+                    Color
+                  </label>
+                  <input
+                    id="underline-color"
+                    type="color"
+                    value={vm.annotationColor}
+                    onChange={(e) => vm.setAnnotationColor(e.target.value)}
+                    style={{
+                      width: 40,
+                      height: 32,
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-sm)",
+                      cursor: "pointer",
+                    }}
+                  />
+                </div>
+                <div className="alert alert-info" style={{ fontSize: 12 }}>
+                  Click on the page to place an underline region, then drag to
+                  resize
+                </div>
+              </div>
+            )}
+
+            {/* ── Strikethrough options ── */}
+            {vm.activeTool === "strikethrough" && (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <div>
+                  <label className="label" htmlFor="strikethrough-color">
+                    Color
+                  </label>
+                  <input
+                    id="strikethrough-color"
+                    type="color"
+                    value={vm.annotationColor}
+                    onChange={(e) => vm.setAnnotationColor(e.target.value)}
+                    style={{
+                      width: 40,
+                      height: 32,
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-sm)",
+                      cursor: "pointer",
+                    }}
+                  />
+                </div>
+                <div className="alert alert-info" style={{ fontSize: 12 }}>
+                  Click on the page to place a strikethrough region, then drag
+                  to resize
+                </div>
+              </div>
+            )}
+
+            {/* ── Note options ── */}
+            {vm.activeTool === "note" && (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <div>
+                  <label className="label" htmlFor="note-text">
+                    Note text
+                  </label>
+                  <textarea
+                    id="note-text"
+                    className="input-field"
+                    value={vm.noteText}
+                    onChange={(e) => vm.setNoteText(e.target.value)}
+                    rows={3}
+                    placeholder="Enter note content…"
+                    style={{ resize: "vertical", fontFamily: "var(--font)" }}
+                  />
+                </div>
+                <div
+                  style={{ display: "flex", gap: 10, alignItems: "flex-end" }}
+                >
+                  <div>
+                    <label className="label" htmlFor="note-color">
+                      Background
+                    </label>
+                    <input
+                      id="note-color"
+                      type="color"
+                      value={vm.noteColor}
+                      onChange={(e) => vm.setNoteColor(e.target.value)}
+                      style={{
+                        width: 40,
+                        height: 32,
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-sm)",
+                        cursor: "pointer",
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="alert alert-info" style={{ fontSize: 12 }}>
+                  Click on the page to place a sticky note
+                </div>
               </div>
             )}
 
@@ -1509,8 +1778,8 @@ export default function EditPdfPage() {
                   vm.overlayUndoCount > 0
                     ? `Undo overlay change (${vm.overlayUndoCount} available)`
                     : vm.snapshots.length > 0
-                      ? `Undo PDF change (${vm.snapshots.length} available)`
-                      : "Nothing to undo"
+                    ? `Undo PDF change (${vm.snapshots.length} available)`
+                    : "Nothing to undo"
                 }
                 aria-label="Undo"
               >

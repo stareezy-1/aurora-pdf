@@ -39,7 +39,7 @@ export interface OcrPageResult {
 
 export interface ShapeAnnotation {
   pageIndex: number;
-  type: "rectangle" | "circle" | "line";
+  type: "rectangle" | "circle" | "line" | "arrow";
   x: number; // points from left
   y: number; // points from bottom
   width: number;
@@ -47,6 +47,19 @@ export interface ShapeAnnotation {
   strokeColor: string; // hex
   fillColor: string | null; // hex or null for no fill
   strokeWidth: number; // pt
+}
+
+/** Annotation overlay: highlight, underline, strikethrough, or sticky note */
+export interface AnnotationOverlay {
+  pageIndex: number;
+  annotationType: "highlight" | "underline" | "strikethrough" | "note";
+  x: number; // points from left
+  y: number; // points from bottom
+  width: number;
+  height: number;
+  color: string; // hex
+  opacity?: number; // 0–100
+  text?: string; // for note type
 }
 
 export interface OcrWord {

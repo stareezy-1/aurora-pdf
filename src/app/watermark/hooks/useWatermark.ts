@@ -1,24 +1,60 @@
+/**
+ * useWatermark — upgraded hook for the Add Watermark tool.
+ *
+ * Changes from the original:
+ * - Uses useFileSession + usePdfProcessor instead of useFileProcessor
+ * - Supports both text and image watermark types
+ * - Supports all placement modes: center, top-left, top-right, bottom-left,
+ *   bottom-right, custom (X/Y %)
+ * - Supports tile mode, page range targeting, layer control (fg/bg)
+ * - Live preview via drawWatermarkPreview from watermark-engine
+ *
+ * Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10
+ */
+
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useFileProcessor } from "@/hooks/useFileProcessor";
+import { useFileSession } from "@/hooks/useFileSession";
+import { usePdfProcessor } from "@/hooks/usePdfProcessor";
 import { useAuroraStore } from "@/stores/aurora.store";
 import {
   applyWatermark,
-  renderPagePreview,
-  getPageCount,
-} from "@/engines/pdf-engine";
-import { buildOutputFilename } from "@/lib/filename-utils";
+  drawWatermarkPreview,
+} from "@/engines/watermark-engine";
 import type { WatermarkConfig } from "@/types/tool.types";
 
-// DEFAULT CONFIG
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const PDF_ACCEPT = [{ mime: "application/pdf", extension: ".pdf" }];
+
+/** Maximum image watermark file size (5 MB). Requirement 5.10 */
+const MAX_IMAGE_MB = 5;
+
+// ---------------------------------------------------------------------------
+// Default config
+// ---------------------------------------------------------------------------
+
 const DEFAULT_CONFIG: WatermarkConfig = {
+  type: "text",
   text: "CONFIDENTIAL",
-  fontSize: 48,
-  opacity: 50,
-  color: "#888888",
-  rotation: 45,
-  placement: "diagonal",
   fontFamily: "Helvetica",
+  fontSize: 48,
+  color: "#888888",
+  imageDataUrl: undefined,
+  opacity: 50,
+  rotation: 45,
+  placement: "center",
+  customX: 50,
+  customY: 50,
+  tile: false,
+  layer: "foreground",
+  pageRange: "",
 };
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
 
 export function useWatermark() {
   const {
@@ -28,68 +64,43 @@ export function useWatermark() {
     errorMessage,
     resultBlobUrl,
     outputFilename,
-    clearWorkbox,
   } = useAuroraStore();
 
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
-  const [pageCount, setPageCount] = useState(0);
-  const [pagePreviews, setPagePreviews] = useState<string[]>([]);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [config, setConfig] = useState<WatermarkConfig>(DEFAULT_CONFIG);
-  const [previewAllPages, setPreviewAllPages] = useState(false);
+  // ── File session ──────────────────────────────────────────────────────────
+  const session = useFileSession({
+    accept: PDF_ACCEPT,
+    generateAllPreviews: true,
+  });
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // ── Watermark config ──────────────────────────────────────────────────────
+  const [config, setConfig] = useState<WatermarkConfig>(DEFAULT_CONFIG);
+
+  // ── Page navigation ───────────────────────────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(0);
+  const [previewAllPages, setPreviewAllPages] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Draw watermark on canvas overlay whenever config, previews, or current page changes
+  // ── Canvas preview ref ────────────────────────────────────────────────────
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // ── Image watermark error ─────────────────────────────────────────────────
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  // ── Draw watermark preview on canvas whenever config or page changes ──────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const imgSrc = pagePreviews[currentPage];
+    const imgSrc = session.allPreviews[currentPage];
     if (!imgSrc) return;
 
-    const img = new Image();
-    img.onload = () => {
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+    drawWatermarkPreview(canvas, imgSrc, config);
+  }, [config, session.allPreviews, currentPage]);
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.save();
-
-      ctx.globalAlpha = config.opacity / 100;
-      ctx.font = `bold ${config.fontSize}px ${config.fontFamily}, sans-serif`;
-      ctx.fillStyle = config.color;
-
-      if (config.placement === "diagonal") {
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate((-config.rotation * Math.PI) / 180);
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(config.text, 0, 0);
-      } else if (config.placement === "header") {
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.fillText(config.text, canvas.width / 2, canvas.height * 0.04);
-      } else {
-        // footer
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(config.text, canvas.width / 2, canvas.height * 0.96);
-      }
-
-      ctx.restore();
-    };
-    img.src = imgSrc;
-  }, [config, pagePreviews, currentPage]);
-
-  // "Preview all pages" cycling — advance page every 1.5s
+  // ── "Preview all pages" cycling ───────────────────────────────────────────
   useEffect(() => {
-    if (previewAllPages && pageCount > 1) {
+    if (previewAllPages && session.pageCount > 1) {
       intervalRef.current = setInterval(() => {
-        setCurrentPage((p) => (p + 1) % pageCount);
+        setCurrentPage((p) => (p + 1) % session.pageCount);
       }, 1500);
     } else {
       if (intervalRef.current) {
@@ -103,74 +114,98 @@ export function useWatermark() {
         intervalRef.current = null;
       }
     };
-  }, [previewAllPages, pageCount]);
+  }, [previewAllPages, session.pageCount]);
 
   const togglePreviewAllPages = useCallback(() => {
     setPreviewAllPages((prev) => !prev);
   }, []);
 
-  const processor = useFileProcessor({
-    process: async (file, onProgress) => {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const result = await applyWatermark(bytes, config, onProgress);
-      return {
-        blob: new Blob([new Uint8Array(result)], { type: "application/pdf" }),
-        filename: buildOutputFilename(file.name, "watermark"),
-      };
+  // ── Processor ─────────────────────────────────────────────────────────────
+  const processor = usePdfProcessor<WatermarkConfig>({
+    processFn: async (bytes, cfg, onProgress) => {
+      return applyWatermark(bytes, cfg, onProgress);
     },
+    outputSuffix: "watermark",
   });
 
-  async function handleFileDrop(files: File[]) {
-    const file = files[0];
-    setPdfFile(file);
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    setPdfBytes(bytes);
-    const n = await getPageCount(bytes);
-    setPageCount(n);
-    setCurrentPage(0);
-    const previews: string[] = [];
-    for (let i = 0; i < Math.min(n, 20); i++) {
-      previews.push(await renderPagePreview(bytes, i));
-    }
-    setPagePreviews(previews);
-  }
-
+  // ── Config update helper ──────────────────────────────────────────────────
   function update(patch: Partial<WatermarkConfig>) {
     setConfig((prev) => ({ ...prev, ...patch }));
   }
 
-  function handleReset() {
-    clearWorkbox();
-    setPdfFile(null);
-    setPdfBytes(null);
-    setPagePreviews([]);
-    setConfig(DEFAULT_CONFIG);
-    setPreviewAllPages(false);
+  // ── Image watermark upload ────────────────────────────────────────────────
+  function handleImageUpload(file: File) {
+    setImageError(null);
+
+    if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
+      setImageError(
+        `Image file is too large (${(file.size / 1024 / 1024).toFixed(
+          1,
+        )} MB). Maximum allowed size is ${MAX_IMAGE_MB} MB.`,
+      );
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      update({ imageDataUrl: dataUrl });
+    };
+    reader.readAsDataURL(file);
   }
 
-  // Keep pdfBytes in state but suppress unused warning
-  void pdfBytes;
+  // ── Apply / reset ─────────────────────────────────────────────────────────
+  function handleApply() {
+    if (!session.file) return;
+    processor.run(session.file, config);
+  }
+
+  function handleReset() {
+    session.reset();
+    setConfig(DEFAULT_CONFIG);
+    setCurrentPage(0);
+    setPreviewAllPages(false);
+    setImageError(null);
+  }
 
   return {
+    // Store state
     status,
     progress,
     progressLabel,
     errorMessage,
     resultBlobUrl,
     outputFilename,
-    clearWorkbox,
-    pdfFile,
-    pageCount,
-    pagePreviews,
+
+    // File session
+    pdfFile: session.file,
+    pageCount: session.pageCount,
+    pagePreviews: session.allPreviews,
+    isLoading: session.isLoading,
+    handleFileDrop: session.handleDrop,
+
+    // Page navigation
     currentPage,
     setCurrentPage,
-    config,
-    processor,
-    handleFileDrop,
-    update,
-    handleReset,
-    canvasRef,
     previewAllPages,
     togglePreviewAllPages,
+
+    // Config
+    config,
+    update,
+
+    // Image watermark
+    handleImageUpload,
+    imageError,
+
+    // Canvas preview
+    canvasRef,
+
+    // Apply / reset
+    processor,
+    handleApply,
+    handleReset,
+
+    MAX_IMAGE_MB,
   };
 }

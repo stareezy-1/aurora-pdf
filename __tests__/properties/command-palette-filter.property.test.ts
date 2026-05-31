@@ -1,80 +1,48 @@
-// Feature: aurora-2-ux-improvements, Property 5: CommandPalette filter returns only tools whose names contain the query
+// Feature: aurora-2-ux-improvements, Property 5: CommandPalette filter returns only matching tools
 
 import { describe, it } from "vitest";
 import * as fc from "fast-check";
 import { filterTools } from "../../src/components/CommandPalette/CommandPalette";
+import { TOOL_REGISTRY } from "../../src/lib/tool-registry";
 
 /**
  * Validates: Requirements 6.2
  *
- * Property 5: CommandPalette filter returns only tools whose names contain the query
+ * Property 5: CommandPalette filter returns only tools that match the query
  *
+ * filterTools searches label, description, and keywords (case-insensitive).
  * For any query string:
- *   1. Every result label contains the query as a case-insensitive substring
- *   2. No tool whose label contains the query is omitted from the results
+ *   1. Every result matches the query in at least one of: label, description, keywords
+ *   2. No tool that matches is omitted from the results
  *   3. An empty query returns all tools
+ *   4. Results are a subset of the input
  */
 
-const TOOLS = [
-  {
-    path: "/compress",
-    label: "Compress PDF",
-    category: "Optimize",
-    icon: "🗜️",
-  },
-  { path: "/ocr", label: "OCR to PDF", category: "Convert", icon: "🔍" },
-  {
-    path: "/searchable-pdf",
-    label: "Searchable PDF OCR",
-    category: "Convert",
-    icon: "🔎",
-  },
-  { path: "/pdf-to-jpg", label: "PDF to JPG", category: "Convert", icon: "🖼️" },
-  {
-    path: "/pdf-to-word",
-    label: "PDF to Word",
-    category: "Convert",
-    icon: "📝",
-  },
-  {
-    path: "/word-to-pdf",
-    label: "Word to PDF",
-    category: "Convert",
-    icon: "📄",
-  },
-  {
-    path: "/pdf-to-excel",
-    label: "PDF to Excel",
-    category: "Convert",
-    icon: "📊",
-  },
-  {
-    path: "/excel-to-pdf",
-    label: "Excel to PDF",
-    category: "Convert",
-    icon: "📋",
-  },
-  { path: "/edit", label: "Edit PDF", category: "Edit", icon: "✏️" },
-  { path: "/sign", label: "Sign PDF", category: "Edit", icon: "✍️" },
-  { path: "/watermark", label: "Add Watermark", category: "Edit", icon: "💧" },
-  { path: "/split", label: "Split PDF", category: "Edit", icon: "✂️" },
-  { path: "/organize", label: "Organize PDF", category: "Edit", icon: "📑" },
-  {
-    path: "/html-to-pdf",
-    label: "HTML to PDF",
-    category: "Convert",
-    icon: "🌐",
-  },
-  { path: "/protect", label: "Protect PDF", category: "Security", icon: "🔐" },
-] as const;
+// Build the same shape that CommandPalette uses internally
+const TOOLS = TOOL_REGISTRY.map((t) => ({
+  path: t.path,
+  label: t.name,
+  category: t.category,
+  icon: t.icon,
+  description: t.description,
+  keywords: t.keywords ?? [],
+}));
 
-describe("Property 5: CommandPalette filter returns only tools whose names contain the query", () => {
-  it("every result label contains the query as a case-insensitive substring", () => {
+function toolMatchesQuery(tool: (typeof TOOLS)[number], q: string): boolean {
+  return (
+    tool.label.toLowerCase().includes(q) ||
+    tool.description.toLowerCase().includes(q) ||
+    tool.keywords.some((k) => k.toLowerCase().includes(q))
+  );
+}
+
+describe("Property 5: CommandPalette filter returns only matching tools", () => {
+  it("every result matches the query in label, description, or keywords", () => {
     fc.assert(
       fc.property(fc.string({ minLength: 1, maxLength: 20 }), (query) => {
         const results = filterTools(TOOLS, query);
         const q = query.toLowerCase();
-        return results.every((t) => t.label.toLowerCase().includes(q));
+        return results.every((t) => toolMatchesQuery(t, q));
       }),
       { numRuns: 100 },
     );
@@ -86,9 +54,8 @@ describe("Property 5: CommandPalette filter returns only tools whose names conta
         const results = filterTools(TOOLS, query);
         const q = query.toLowerCase();
         const resultPaths = new Set(results.map((t) => t.path));
-        // Every tool that matches must appear in results
         return TOOLS.every((t) =>
-          t.label.toLowerCase().includes(q) ? resultPaths.has(t.path) : true,
+          toolMatchesQuery(t, q) ? resultPaths.has(t.path) : true,
         );
       }),
       { numRuns: 100 },
@@ -109,7 +76,7 @@ describe("Property 5: CommandPalette filter returns only tools whose names conta
     fc.assert(
       fc.property(fc.string({ maxLength: 20 }), (query) => {
         const results = filterTools(TOOLS, query);
-        const allPaths = new Set<string>(TOOLS.map((t) => t.path));
+        const allPaths = new Set(TOOLS.map((t) => t.path));
         return results.every((t) => allPaths.has(t.path));
       }),
       { numRuns: 100 },

@@ -107,4 +107,24 @@
     <priority>0.8</priority>
   </url>
 
+  <!-- ── Site pages ─────────────────────────────────────────────────────── -->
+  <url>
+    <loc>https://aurora.stareezy.tech/about</loc>
+    <lastmod>2025-01-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://aurora.stareezy.tech/faq</loc>
+    <lastmod>2025-01-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://aurora.stareezy.tech/terms</loc>
+    <lastmod>2025-01-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
 </urlset>

@@ -90,36 +90,44 @@ describe("Property 3: Page range parser produces valid, deduplicated, bounded ou
     );
   });
 
-  it("returns [] for empty string", () => {
+  it("throws InvalidPageRangeError for empty string", () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 100 }), (pageCount) => {
-        return parseRange("", pageCount).length === 0;
+        let threw = false;
+        try {
+          parseRange("", pageCount);
+        } catch {
+          threw = true;
+        }
+        return threw;
       }),
       { numRuns: 100 },
     );
   });
 
-  it("out-of-bounds page numbers are excluded from the result", () => {
+  it("throws for out-of-bounds page numbers (above totalPages)", () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 50 }).chain((pageCount) =>
           fc.tuple(
             fc.constant(pageCount),
-            // Generate page numbers strictly outside [1, pageCount]
+            // Generate page numbers strictly above pageCount (always out-of-bounds)
             fc
-              .array(
-                fc.oneof(
-                  fc.integer({ min: pageCount + 1, max: pageCount + 100 }),
-                  fc.integer({ min: -100, max: 0 }),
-                ),
-                { minLength: 1, maxLength: 5 },
-              )
+              .array(fc.integer({ min: pageCount + 1, max: pageCount + 100 }), {
+                minLength: 1,
+                maxLength: 5,
+              })
               .map((nums) => nums.join(",")),
           ),
         ),
         ([pageCount, rangeStr]) => {
-          const result = parseRange(rangeStr, pageCount);
-          return result.length === 0;
+          let threw = false;
+          try {
+            parseRange(rangeStr, pageCount);
+          } catch {
+            threw = true;
+          }
+          return threw;
         },
       ),
       { numRuns: 100 },

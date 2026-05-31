@@ -2,64 +2,40 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import ReactDOM from "react-dom";
 import { useNavigate } from "react-router";
 import { styles } from "./CommandPalette.style";
+import { TOOL_REGISTRY } from "@/lib/tool-registry";
 import type { CommandPaletteProps } from "./CommandPalette.types";
 
-const TOOLS = [
-  {
-    path: "/compress",
-    label: "Compress PDF",
-    category: "Optimize",
-    icon: "🗜️",
-  },
-  { path: "/ocr", label: "OCR to PDF", category: "Convert", icon: "🔍" },
-  {
-    path: "/searchable-pdf",
-    label: "Searchable PDF OCR",
-    category: "Convert",
-    icon: "🔎",
-  },
-  { path: "/pdf-to-jpg", label: "PDF to JPG", category: "Convert", icon: "🖼️" },
-  {
-    path: "/pdf-to-word",
-    label: "PDF to Word",
-    category: "Convert",
-    icon: "📝",
-  },
-  {
-    path: "/word-to-pdf",
-    label: "Word to PDF",
-    category: "Convert",
-    icon: "📄",
-  },
-  {
-    path: "/pdf-to-excel",
-    label: "PDF to Excel",
-    category: "Convert",
-    icon: "📊",
-  },
-  {
-    path: "/excel-to-pdf",
-    label: "Excel to PDF",
-    category: "Convert",
-    icon: "📋",
-  },
-  { path: "/edit", label: "Edit PDF", category: "Edit", icon: "✏️" },
-  { path: "/sign", label: "Sign PDF", category: "Edit", icon: "✍️" },
-  { path: "/watermark", label: "Add Watermark", category: "Edit", icon: "💧" },
-  { path: "/split", label: "Split PDF", category: "Edit", icon: "✂️" },
-  { path: "/organize", label: "Organize PDF", category: "Edit", icon: "📑" },
-  {
-    path: "/html-to-pdf",
-    label: "HTML to PDF",
-    category: "Convert",
-    icon: "🌐",
-  },
-  { path: "/protect", label: "Protect PDF", category: "Security", icon: "🔐" },
-] as const;
+// Build the flat tool list from the registry — single source of truth
+const TOOLS = TOOL_REGISTRY.map((t) => ({
+  path: t.path,
+  label: t.name,
+  category: t.category,
+  icon: t.icon,
+  description: t.description,
+  keywords: t.keywords ?? [],
+}));
+
+// Human-readable category labels
+const CATEGORY_LABELS: Record<string, string> = {
+  "convert-to": "Convert to PDF",
+  "convert-from": "Convert from PDF",
+  edit: "Edit",
+  organize: "Organize",
+  optimize: "Optimize",
+  secure: "Secure",
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  "convert-to": "#00ff88",
+  "convert-from": "#f59e0b",
+  edit: "#00ccff",
+  organize: "#f59e0b",
+  optimize: "#4ade80",
+  secure: "#7c3aed",
+};
 
 /**
  * Highlight the matched substring in a label.
- * Returns an array of React nodes with the match wrapped in <mark>.
  */
 export function highlightMatch(label: string, query: string): React.ReactNode {
   if (!query) return label;
@@ -77,26 +53,18 @@ export function highlightMatch(label: string, query: string): React.ReactNode {
 }
 
 /**
- * Pure filter function — exported so it can be tested independently.
- * Returns tools whose label contains the query (case-insensitive substring match).
+ * Pure filter — searches label, description, and keywords.
+ * Exported for testing.
  */
-export function filterTools(
-  tools: ReadonlyArray<{
-    path: string;
-    label: string;
-    category: string;
-    icon: string;
-  }>,
-  query: string,
-): ReadonlyArray<{
-  path: string;
-  label: string;
-  category: string;
-  icon: string;
-}> {
+export function filterTools(tools: typeof TOOLS, query: string): typeof TOOLS {
   if (!query) return tools;
   const q = query.toLowerCase();
-  return tools.filter((t) => t.label.toLowerCase().includes(q));
+  return tools.filter(
+    (t) =>
+      t.label.toLowerCase().includes(q) ||
+      t.description.toLowerCase().includes(q) ||
+      t.keywords.some((k) => k.toLowerCase().includes(q)),
+  );
 }
 
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
@@ -108,8 +76,6 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const previousFocusRef = useRef<Element | null>(null);
 
   const filtered = filterTools(TOOLS, query);
-
-  // Clamp activeIndex when filtered list shrinks
   const safeActiveIndex =
     filtered.length > 0 ? Math.min(activeIndex, filtered.length - 1) : 0;
 
@@ -117,10 +83,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   useEffect(() => {
     if (open) {
       previousFocusRef.current = document.activeElement;
-      // Defer so the portal has rendered
-      const id = requestAnimationFrame(() => {
-        inputRef.current?.focus();
-      });
+      const id = requestAnimationFrame(() => inputRef.current?.focus());
       return () => cancelAnimationFrame(id);
     }
   }, [open]);
@@ -144,8 +107,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
-    const activeItem = list.querySelector(`[data-index="${safeActiveIndex}"]`);
-    activeItem?.scrollIntoView({ block: "nearest" });
+    list
+      .querySelector(`[data-index="${safeActiveIndex}"]`)
+      ?.scrollIntoView({ block: "nearest" });
   }, [safeActiveIndex]);
 
   const handleNavigate = useCallback(
@@ -175,16 +139,14 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           break;
         case "Enter":
           e.preventDefault();
-          if (filtered[safeActiveIndex]) {
+          if (filtered[safeActiveIndex])
             handleNavigate(filtered[safeActiveIndex].path);
-          }
           break;
         case "Escape":
           e.preventDefault();
           onClose();
           break;
         case "Tab":
-          // Focus trap: keep Tab within the dialog
           e.preventDefault();
           break;
       }
@@ -203,7 +165,6 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       className={styles.backdrop}
       role="presentation"
       onMouseDown={(e) => {
-        // Close when clicking the backdrop (not the overlay)
         if (e.target === e.currentTarget) onClose();
       }}
     >
@@ -214,23 +175,86 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         aria-label="Command palette"
         onKeyDown={handleKeyDown}
       >
-        <input
-          ref={inputRef}
-          className={styles.input}
-          type="text"
-          placeholder="Search tools…"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setActiveIndex(0);
+        {/* Search input */}
+        <div
+          style={{
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
           }}
-          aria-label="Search tools"
-          aria-autocomplete="list"
-          aria-controls="cp-listbox"
-          aria-activedescendant={activeOptionId}
-          autoComplete="off"
-          spellCheck={false}
-        />
+        >
+          <span
+            style={{
+              position: "absolute",
+              left: 16,
+              fontSize: 16,
+              color: "var(--text-muted)",
+              pointerEvents: "none",
+            }}
+          >
+            🔍
+          </span>
+          <input
+            ref={inputRef}
+            className={styles.input}
+            type="text"
+            placeholder={`Search ${TOOLS.length} tools…`}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveIndex(0);
+            }}
+            aria-label="Search tools"
+            aria-autocomplete="list"
+            aria-controls="cp-listbox"
+            aria-activedescendant={activeOptionId}
+            autoComplete="off"
+            spellCheck={false}
+            style={{ paddingLeft: 44 }}
+          />
+          {query && (
+            <button
+              onClick={() => {
+                setQuery("");
+                setActiveIndex(0);
+                inputRef.current?.focus();
+              }}
+              aria-label="Clear search"
+              style={{
+                position: "absolute",
+                right: 12,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--text-muted)",
+                fontSize: 16,
+                padding: 4,
+                lineHeight: 1,
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Results count */}
+        {query && (
+          <div
+            style={{
+              padding: "6px 16px 0",
+              fontSize: 11,
+              color: "var(--text-muted)",
+            }}
+          >
+            {filtered.length === 0
+              ? "No results"
+              : `${filtered.length} tool${
+                  filtered.length !== 1 ? "s" : ""
+                } found`}
+          </div>
+        )}
+
+        {/* Tool list */}
         <ul
           id="cp-listbox"
           ref={listRef}
@@ -240,6 +264,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         >
           {filtered.map((tool, i) => {
             const isActive = i === safeActiveIndex;
+            const catColor =
+              CATEGORY_COLORS[tool.category] ?? "var(--text-muted)";
+            const catLabel = CATEGORY_LABELS[tool.category] ?? tool.category;
             return (
               <li
                 key={tool.path}
@@ -251,7 +278,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                 role="option"
                 aria-selected={isActive}
                 onMouseDown={(e) => {
-                  e.preventDefault(); // prevent input blur
+                  e.preventDefault();
                   handleNavigate(tool.path);
                 }}
                 onMouseEnter={() => setActiveIndex(i)}
@@ -259,8 +286,37 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                 <span className={styles.itemIcon} aria-hidden="true">
                   {tool.icon}
                 </span>
-                <span className={styles.itemLabel}>
-                  {highlightMatch(tool.label, query)}
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className={styles.itemLabel}>
+                    {highlightMatch(tool.label, query)}
+                  </span>
+                  <span
+                    style={{
+                      display: "block",
+                      fontSize: 11,
+                      color: "var(--text-muted)",
+                      marginTop: 1,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {tool.description}
+                  </span>
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: catColor,
+                    background: `${catColor}18`,
+                    padding: "2px 7px",
+                    borderRadius: 999,
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  {catLabel}
                 </span>
               </li>
             );
@@ -276,6 +332,61 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             </li>
           )}
         </ul>
+
+        {/* Footer hint */}
+        <div
+          style={{
+            padding: "8px 16px",
+            borderTop: "1px solid var(--border)",
+            display: "flex",
+            gap: 16,
+            fontSize: 11,
+            color: "var(--text-muted)",
+          }}
+        >
+          <span>
+            <kbd
+              style={{
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                padding: "1px 5px",
+                fontSize: 10,
+              }}
+            >
+              ↑↓
+            </kbd>{" "}
+            navigate
+          </span>
+          <span>
+            <kbd
+              style={{
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                padding: "1px 5px",
+                fontSize: 10,
+              }}
+            >
+              ↵
+            </kbd>{" "}
+            open
+          </span>
+          <span>
+            <kbd
+              style={{
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                padding: "1px 5px",
+                fontSize: 10,
+              }}
+            >
+              Esc
+            </kbd>{" "}
+            close
+          </span>
+        </div>
       </div>
     </div>
   );
