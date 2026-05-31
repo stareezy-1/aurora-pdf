@@ -40,6 +40,9 @@ function RootLayout() {
   const swRegistration = useAuroraStore((s) => s.swRegistration);
 
   function handleReload() {
+    // skipWaiting: true means the new SW already called skipWaiting automatically.
+    // The controllerchange event in useSwUpdate will trigger a reload.
+    // This button is a manual fallback in case the auto-reload hasn't fired yet.
     swRegistration?.waiting?.postMessage({ type: "SKIP_WAITING" });
     window.location.reload();
   }
