@@ -27,7 +27,6 @@ import {
   renameSignature,
   applySignatures,
 } from "@/engines/signature-manager";
-import { buildOutputFilename } from "@/lib/filename-utils";
 import { SignatureImageTooLargeError } from "@/lib/errors";
 import type { SignatureMethod, SavedSignature } from "@/types/tool.types";
 

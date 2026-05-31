@@ -41,7 +41,7 @@ function GitHubIcon() {
   );
 }
 
-export function NavBar({ currentPath }: NavBarProps) {
+export function NavBar({ currentPath: _currentPath }: NavBarProps) {
   const status = useAuroraStore((s) => s.status);
   const theme = useAuroraStore((s) => s.theme);
   const toggleTheme = useAuroraStore((s) => s.toggleTheme);

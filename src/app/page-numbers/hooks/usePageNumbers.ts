@@ -9,11 +9,7 @@ import { useFileSession } from "@/hooks/useFileSession";
 import { usePdfProcessor } from "@/hooks/usePdfProcessor";
 import { applyPageNumbers } from "@/engines/organization-engine";
 import { useAuroraStore } from "@/stores/aurora.store";
-import type {
-  PageNumberConfig,
-  PageNumberPosition,
-  PageNumberFormat,
-} from "@/types/tool.types";
+import type { PageNumberConfig } from "@/types/tool.types";
 
 const PDF_ACCEPT = [{ mime: "application/pdf", extension: ".pdf" }];
 

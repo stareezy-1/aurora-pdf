@@ -92,7 +92,7 @@ const dprArb: fc.Arbitrary<number> = fc.oneof(
  * The logical canvas size is naturalWidth/dpr × naturalHeight/dpr at zoom 1.
  * At a given zoom the displayed size is logicalW*zoom × logicalH*zoom.
  */
-const overlayArb = (
+const _overlayArb = (
   naturalWidth: number,
   naturalHeight: number,
   dpr: number,

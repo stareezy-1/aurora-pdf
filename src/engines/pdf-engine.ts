@@ -334,47 +334,16 @@ export async function embedSignature(
 // applyWatermark
 // ---------------------------------------------------------------------------
 
-const PLACEMENT_COORDS: Record<
-  string,
-  (w: number, h: number) => { x: number; y: number }
-> = {
-  diagonal: (w, h) => ({ x: w * 0.1, y: h * 0.4 }),
-  header: (w, h) => ({ x: w * 0.1, y: h * 0.88 }),
-  footer: (w, _h) => ({ x: w * 0.1, y: 30 }),
-};
-
 export async function applyWatermark(
   pdfBytes: Uint8Array,
   config: WatermarkConfig,
   onProgress: ProgressCallback,
 ): Promise<Uint8Array> {
-  const pdfDoc = await PDFDocument.load(copyBytes(pdfBytes));
-  const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const pages = pdfDoc.getPages();
-  const { r, g, b } = hexToRgb(config.color);
-  const opacity = config.opacity / 100;
-
-  for (let i = 0; i < pages.length; i++) {
-    onProgress(
-      Math.round((i / pages.length) * 100),
-      `Watermarking page ${i + 1} of ${pages.length}…`,
-    );
-    const page = pages[i];
-    const { width, height } = page.getSize();
-    const coords = PLACEMENT_COORDS[config.placement](width, height);
-    const rotAngle = config.placement === "diagonal" ? config.rotation : 0;
-    page.drawText(config.text, {
-      x: coords.x,
-      y: coords.y,
-      size: config.fontSize,
-      font,
-      color: rgb(r, g, b),
-      opacity,
-      rotate: degrees(rotAngle),
-    });
-  }
-  onProgress(100, "Done");
-  return pdfDoc.save();
+  // Delegate to the watermark engine which handles the full WatermarkConfig shape
+  const { applyWatermark: applyWatermarkEngine } = await import(
+    "@/engines/watermark-engine"
+  );
+  return applyWatermarkEngine(pdfBytes, config, onProgress);
 }
 
 // ---------------------------------------------------------------------------

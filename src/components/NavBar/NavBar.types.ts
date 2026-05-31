@@ -1,3 +1,3 @@
 export interface NavBarProps {
-  currentPath: string;
+  currentPath?: string;
 }

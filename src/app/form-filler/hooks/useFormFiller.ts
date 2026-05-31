@@ -68,7 +68,7 @@ export function useFormFiller() {
       );
       const hasXfa =
         acroForm != null &&
-        (acroForm as Record<string, unknown>)["XFA"] != null;
+        (acroForm as unknown as Record<string, unknown>)["XFA"] != null;
       setIsXfa(hasXfa);
 
       const parsed: FormField[] = rawFields.map((f) => {

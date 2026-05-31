@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
-import { PDFDocument, PDFFont, StandardFonts } from "pdf-lib";
+import { PDFDocument } from "pdf-lib";
 import { useFileSession } from "@/hooks/useFileSession";
 import { useAuroraStore } from "@/stores/aurora.store";
 
